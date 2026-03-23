@@ -153,8 +153,9 @@ export default function App() {
 		});
 	}, []);
 
-	// Listen for folder selection from nav view
+	// Listen for folder selection from nav view (singleton viewer only)
 	useEffect(() => {
+		if (isTileMode) return;
 		return window.api.onFolderSelected((path) => {
 			setFocusedFolder(path);
 			setSelectedPath(null);
@@ -320,9 +321,8 @@ export default function App() {
 				.then(([content, stats]) => {
 					if (
 						ENABLE_STALE_LOAD_GUARD &&
-						latestLoadTokenRef.current !== loadToken ||
-						ENABLE_STALE_LOAD_GUARD &&
-						selectedPathRef.current !== path
+						(latestLoadTokenRef.current !== loadToken ||
+						selectedPathRef.current !== path)
 					) {
 						return;
 					}
@@ -335,9 +335,8 @@ export default function App() {
 				.catch((err) => {
 					if (
 						ENABLE_STALE_LOAD_GUARD &&
-						latestLoadTokenRef.current !== loadToken ||
-						ENABLE_STALE_LOAD_GUARD &&
-						selectedPathRef.current !== path
+						(latestLoadTokenRef.current !== loadToken ||
+						selectedPathRef.current !== path)
 					) {
 						return;
 					}

@@ -521,6 +521,7 @@ async function init() {
 				workspacePath: t.workspacePath,
 				ptySessionId: t.ptySessionId,
 				url: t.url,
+				label: t.label,
 				zIndex: t.zIndex,
 			})),
 			viewport: {
@@ -752,8 +753,12 @@ async function init() {
 	}
 
 	function syncSelectionVisuals() {
+		const selectedTiles = getSelectedTiles();
+		const isMultiSelect = selectedTiles.length > 1;
 		for (const [id, dom] of tileDOMs) {
-			dom.container.classList.toggle("tile-selected", isSelected(id));
+			const selected = isSelected(id);
+			dom.container.classList.toggle("tile-selected", selected);
+			dom.container.classList.toggle("tile-group-selected", selected && isMultiSelect);
 		}
 	}
 
@@ -990,6 +995,11 @@ async function init() {
 		tileLayer.appendChild(dom.container);
 		tileDOMs.set(tile.id, dom);
 		positionTile(dom.container, tile, canvasX, canvasY, canvasScale);
+
+		// Persist label changes triggered by inline rename (term tiles)
+		dom.container.addEventListener("tile-label-change", () => {
+			saveCanvasDebounced();
+		});
 
 		return tile;
 	}
@@ -1402,7 +1412,8 @@ async function init() {
 			const ws = getActiveWorkspace();
 			if (!ws) return;
 			const filePath = `${ws.path}/Note-${Date.now()}.md`;
-			await window.shellApi.writeFile(filePath, "");
+			const writeResult = await window.shellApi.writeFile(filePath, "");
+			if (!writeResult || !writeResult.ok) return;
 			createFileTile("note", cx, cy, filePath);
 		} else if (selected === "new-browser") {
 			const tile = createCanvasTile("browser", cx, cy);
@@ -1760,6 +1771,7 @@ async function init() {
 					height: savedTile.height,
 					zIndex: savedTile.zIndex,
 					ptySessionId: savedTile.ptySessionId,
+					label: savedTile.label,
 				},
 				);
 				spawnTerminalWebview(tile);

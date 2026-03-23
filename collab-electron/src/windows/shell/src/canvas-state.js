@@ -13,6 +13,7 @@
  * @property {string} [url] - URL for browser tiles
  * @property {string} [cwd] - Working directory for terminal tiles
  * @property {string} [ptySessionId] - PTY session ID for terminal tiles
+ * @property {string} [label] - Custom display name (for term tiles)
  * @property {number} zIndex - Stacking order
  */
 

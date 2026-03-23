@@ -31,6 +31,63 @@ export function createTileDOM(tile, callbacks) {
   if (tile.folderPath) titleText.title = tile.folderPath;
   titleBar.appendChild(titleText);
 
+  // For term tiles, allow inline rename via double-click on the title text
+  if (tile.type === "term") {
+    titleText.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      const currentName = titleText.querySelector(".tile-title-name")?.textContent || "Terminal";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "tile-label-input";
+      input.value = currentName;
+      titleText.style.display = "none";
+      titleBar.insertBefore(input, titleText.nextSibling);
+      input.focus();
+      input.select();
+
+      let editDone = false;
+
+      function commitEdit() {
+        if (editDone) return;
+        editDone = true;
+        const newName = input.value.trim();
+        if (newName) {
+          tile.label = newName;
+        } else {
+          tile.label = undefined;
+        }
+        input.remove();
+        titleText.style.display = "";
+        // Refresh displayed text
+        titleText.textContent = "";
+        const ps = document.createElement("span");
+        ps.className = "tile-title-parent";
+        ps.textContent = "";
+        const ns = document.createElement("span");
+        ns.className = "tile-title-name";
+        ns.textContent = tile.label || "Terminal";
+        titleText.appendChild(ps);
+        titleText.appendChild(ns);
+        // Notify consumer to save (custom event)
+        titleBar.dispatchEvent(new CustomEvent("tile-label-change", { bubbles: true, detail: { id: tile.id } }));
+      }
+
+      function cancelEdit() {
+        if (editDone) return;
+        editDone = true;
+        input.remove();
+        titleText.style.display = "";
+      }
+
+      input.addEventListener("mousedown", (e) => e.stopPropagation());
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); commitEdit(); }
+        if (e.key === "Escape") { e.preventDefault(); cancelEdit(); }
+      });
+      input.addEventListener("blur", commitEdit);
+    });
+  }
+
   // For browser tiles, add nav controls and a URL input to the title bar
   let urlInput;
   let navBack;
@@ -173,7 +230,7 @@ export function createTileDOM(tile, callbacks) {
 }
 
 export function getTileLabel(tile) {
-  if (tile.type === "term") return { parent: "", name: "Terminal" };
+  if (tile.type === "term") return { parent: "", name: tile.label || "Terminal" };
   if (tile.type === "browser") {
     if (tile.url) {
       try { return { parent: "", name: new URL(tile.url).hostname }; }

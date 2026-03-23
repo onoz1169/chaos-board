@@ -1033,12 +1033,58 @@ body {
 
 /* ── Selection, dragging, marquee ── */
 
+:root {
+	--group-border: rgba(99, 179, 255, 0.8);
+	--group-bg: rgba(99, 179, 255, 0.08);
+}
+
+.dark {
+	--group-border: rgba(130, 195, 255, 0.7);
+	--group-bg: rgba(130, 195, 255, 0.07);
+}
+
 .canvas-tile.tile-selected {
 	border-color: #4a9eff;
 }
 
+/* Multi-selection grouping: colored border + subtle background tint */
+.canvas-tile.tile-group-selected {
+	border-color: var(--group-border);
+	background-color: var(--group-bg);
+	box-shadow:
+		0 0 0 2px var(--group-border),
+		0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
 .canvas-tile.tile-dragging {
 	opacity: 0.85;
+}
+
+/* ── Terminal label inline editing ── */
+
+.canvas-tile[data-tile-type="term"] .tile-title-text {
+	cursor: text;
+}
+
+.tile-label-input {
+	flex: 1;
+	min-width: 60px;
+	max-width: 180px;
+	font-family: var(--font-mono);
+	font-size: 11px;
+	font-weight: 500;
+	color: var(--fg);
+	background: color-mix(in srgb, var(--fg) 8%, transparent);
+	border: 1px solid color-mix(in srgb, var(--fg) 30%, transparent);
+	border-radius: 3px;
+	padding: 1px 4px;
+	outline: none;
+	line-height: 1.4;
+}
+
+.tile-label-input:focus {
+	border-color: #4a9eff;
+	background: color-mix(in srgb, #4a9eff 8%, transparent);
 }
 
 .selection-marquee {
