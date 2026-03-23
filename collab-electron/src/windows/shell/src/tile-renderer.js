@@ -63,12 +63,15 @@ export function createTileDOM(tile, callbacks) {
     textEl.setAttribute("placeholder", "メモ...");
     contentArea.appendChild(textEl);
 
+    // contentOverlay is placed outside contentArea so it does not cover the
+    // contenteditable sticky-text element. For sticky notes the overlay sits
+    // as a sibling of contentArea inside the container (same as standard tiles).
     const contentOverlay = document.createElement("div");
     contentOverlay.className = "tile-content-overlay";
-    contentArea.appendChild(contentOverlay);
 
     container.appendChild(titleBar);
     container.appendChild(contentArea);
+    container.appendChild(contentOverlay);
 
     return {
       container,

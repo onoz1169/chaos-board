@@ -122,6 +122,9 @@ export function attachDrag(titleBar, tile, {
 
   if (contentOverlay) {
     contentOverlay.addEventListener("mousedown", (e) => {
+      // Do not intercept clicks targeting a contenteditable element (e.g. sticky
+      // note text area) — let the event reach the editable so it can receive focus.
+      if (e.target.isContentEditable || e.target.closest("[contenteditable]")) return;
       startDrag(e, { deferFocus: true });
     });
   }
