@@ -76,6 +76,16 @@ export function createTileDOM(tile, callbacks) {
     textEl.className = "sticky-text";
     textEl.contentEditable = "true";
     textEl.setAttribute("placeholder", "メモ...");
+    // Prevent mousedown/click from bubbling to the tile drag handlers so that
+    // clicking the text area always activates the caret without needing a
+    // "focus first, then click" two-step interaction.
+    textEl.addEventListener("mousedown", (e) => {
+      e.stopPropagation();
+    });
+    textEl.addEventListener("click", (e) => {
+      e.stopPropagation();
+      textEl.focus();
+    });
     contentArea.appendChild(textEl);
 
     // contentOverlay is placed outside contentArea so it does not cover the
@@ -83,6 +93,9 @@ export function createTileDOM(tile, callbacks) {
     // as a sibling of contentArea inside the container (same as standard tiles).
     const contentOverlay = document.createElement("div");
     contentOverlay.className = "tile-content-overlay";
+    // Sticky notes are edited directly via contenteditable. The overlay must
+    // never intercept pointer events — dragging is handled solely by titleBar.
+    contentOverlay.style.pointerEvents = "none";
 
     container.appendChild(titleBar);
     container.appendChild(contentArea);

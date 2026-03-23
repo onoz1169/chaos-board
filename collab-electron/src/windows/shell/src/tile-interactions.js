@@ -121,12 +121,18 @@ export function attachDrag(titleBar, tile, {
   titleBar.addEventListener("mousedown", (e) => startDrag(e));
 
   if (contentOverlay) {
-    contentOverlay.addEventListener("mousedown", (e) => {
-      // Do not intercept clicks targeting a contenteditable element (e.g. sticky
-      // note text area) — let the event reach the editable so it can receive focus.
-      if (e.target.isContentEditable || e.target.closest("[contenteditable]")) return;
-      startDrag(e, { deferFocus: true });
-    });
+    // Sticky note tiles use contenteditable for direct text input. The overlay
+    // must not intercept any pointer events for these tiles — dragging is
+    // handled solely by the titleBar. Skip mousedown registration entirely.
+    const isStickyNote = tile.type === "text";
+    if (!isStickyNote) {
+      contentOverlay.addEventListener("mousedown", (e) => {
+        // Do not intercept clicks targeting a contenteditable element (e.g. sticky
+        // note text area) — let the event reach the editable so it can receive focus.
+        if (e.target.isContentEditable || e.target.closest("[contenteditable]")) return;
+        startDrag(e, { deferFocus: true });
+      });
+    }
   }
 }
 
