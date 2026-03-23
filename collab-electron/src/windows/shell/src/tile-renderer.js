@@ -42,6 +42,21 @@ export function createTileDOM(tile, callbacks) {
 
     const btnGroup = document.createElement("div");
     btnGroup.className = "tile-btn-group";
+
+    const fontDownBtn = document.createElement("button");
+    fontDownBtn.className = "tile-action-btn sticky-font-down";
+    fontDownBtn.textContent = "A−";
+    fontDownBtn.title = "Decrease font size";
+    fontDownBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+    btnGroup.appendChild(fontDownBtn);
+
+    const fontUpBtn = document.createElement("button");
+    fontUpBtn.className = "tile-action-btn sticky-font-up";
+    fontUpBtn.textContent = "A+";
+    fontUpBtn.title = "Increase font size";
+    fontUpBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+    btnGroup.appendChild(fontUpBtn);
+
     const closeBtn = document.createElement("button");
     closeBtn.className = "tile-action-btn tile-close-btn";
     closeBtn.innerHTML = "&times;";

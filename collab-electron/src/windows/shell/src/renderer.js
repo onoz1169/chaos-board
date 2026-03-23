@@ -524,6 +524,7 @@ async function init() {
 				label: t.label,
 				content: t.content,
 				noteColor: t.noteColor,
+				fontSize: t.fontSize,
 				zIndex: t.zIndex,
 			})),
 			viewport: {
@@ -1006,8 +1007,8 @@ async function init() {
 		return tile;
 	}
 
-	function createTextTile(cx, cy, content = "", noteColor = "#FFF3B0") {
-		const tile = createCanvasTile("text", cx, cy, { content, noteColor });
+	function createTextTile(cx, cy, content = "", noteColor = "#FFF3B0", fontSize = 14) {
+		const tile = createCanvasTile("text", cx, cy, { content, noteColor, fontSize });
 		const dom = tileDOMs.get(tile.id);
 		if (!dom) return;
 
@@ -1016,12 +1017,27 @@ async function init() {
 
 		// Set initial content and wire up input handler
 		const textEl = dom.contentArea.querySelector(".sticky-text");
+		const FONT_SIZES = [10, 12, 14, 16, 20, 24, 32, 48];
 		if (textEl) {
 			textEl.textContent = content;
+			textEl.style.fontSize = fontSize + "px";
 			textEl.addEventListener("input", () => {
 				tile.content = textEl.textContent;
 				saveCanvasDebounced();
 			});
+			// Ctrl+Scroll to resize font
+			textEl.addEventListener("wheel", (e) => {
+				if (!e.ctrlKey && !e.metaKey) return;
+				e.preventDefault();
+				e.stopPropagation();
+				const idx = FONT_SIZES.indexOf(tile.fontSize || 14);
+				const next = e.deltaY < 0
+					? FONT_SIZES[Math.min(idx + 1, FONT_SIZES.length - 1)]
+					: FONT_SIZES[Math.max(idx - 1, 0)];
+				tile.fontSize = next;
+				textEl.style.fontSize = next + "px";
+				saveCanvasDebounced();
+			}, { passive: false });
 		}
 
 		// Wire up color buttons
@@ -1035,6 +1051,22 @@ async function init() {
 				saveCanvasImmediate();
 			});
 		});
+
+		// Wire up A- / A+ buttons
+		const fontDownBtn = dom.container.querySelector(".sticky-font-down");
+		const fontUpBtn = dom.container.querySelector(".sticky-font-up");
+		const adjustFont = (dir) => {
+			const FONT_SIZES = [10, 12, 14, 16, 20, 24, 32, 48];
+			const idx = FONT_SIZES.indexOf(tile.fontSize || 14);
+			const next = dir > 0
+				? FONT_SIZES[Math.min(idx + 1, FONT_SIZES.length - 1)]
+				: FONT_SIZES[Math.max(idx - 1, 0)];
+			tile.fontSize = next;
+			if (textEl) textEl.style.fontSize = next + "px";
+			saveCanvasDebounced();
+		};
+		if (fontDownBtn) fontDownBtn.addEventListener("click", (e) => { e.stopPropagation(); adjustFont(-1); });
+		if (fontUpBtn) fontUpBtn.addEventListener("click", (e) => { e.stopPropagation(); adjustFont(1); });
 
 		saveCanvasImmediate();
 	}
@@ -1841,6 +1873,7 @@ async function init() {
 					savedTile.x, savedTile.y,
 					savedTile.content || "",
 					savedTile.noteColor || "#FFF3B0",
+					savedTile.fontSize || 14,
 				);
 			} else if (savedTile.filePath) {
 				createFileTile(
