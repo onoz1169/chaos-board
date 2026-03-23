@@ -1112,3 +1112,67 @@ body {
 .tile-url-input::placeholder {
 	color: rgba(128, 128, 128, 0.5);
 }
+
+/* ── Launch All toolbar ── */
+
+#launch-toolbar {
+	position: fixed;
+	bottom: 32px;
+	right: 16px;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: 5px 8px;
+	z-index: 200;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+	font-family: var(--font-mono);
+	font-size: 11px;
+}
+
+#launch-tool-select {
+	font-family: var(--font-mono);
+	font-size: 11px;
+	background: transparent;
+	color: var(--fg);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 2px 4px;
+	cursor: pointer;
+	outline: none;
+}
+
+#launch-custom-cmd {
+	font-family: var(--font-mono);
+	font-size: 11px;
+	background: transparent;
+	color: var(--fg);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 2px 6px;
+	width: 120px;
+	outline: none;
+}
+
+#launch-all-btn {
+	font-family: var(--font-mono);
+	font-size: 11px;
+	font-weight: 600;
+	background: var(--edge-dot);
+	color: #fff;
+	border: none;
+	border-radius: 4px;
+	padding: 3px 10px;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+#launch-all-btn:hover {
+	filter: brightness(1.1);
+}
+
+#launch-all-btn:active {
+	transform: scale(0.97);
+}

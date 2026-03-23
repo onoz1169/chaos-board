@@ -1388,6 +1388,7 @@ async function init() {
 
 		const selected = await window.shellApi.showContextMenu([
 			{ id: "new-terminal", label: "New terminal tile" },
+			{ id: "new-text", label: "New text tile" },
 			{ id: "new-browser", label: "New browser tile" },
 		]);
 
@@ -1397,6 +1398,12 @@ async function init() {
 			const tile = createCanvasTile("term", cx, cy, { cwd });
 			spawnTerminalWebview(tile, true);
 			saveCanvasImmediate();
+		} else if (selected === "new-text") {
+			const ws = getActiveWorkspace();
+			if (!ws) return;
+			const filePath = `${ws.path}/Note-${Date.now()}.md`;
+			await window.shellApi.writeFile(filePath, "");
+			createFileTile("note", cx, cy, filePath);
 		} else if (selected === "new-browser") {
 			const tile = createCanvasTile("browser", cx, cy);
 			spawnBrowserWebview(tile, true);
@@ -2617,3 +2624,47 @@ async function checkFirstLaunchDialog() {
 }
 
 init();
+
+// -- Launch All toolbar --
+
+(function initLaunchToolbar() {
+	const toolSelect = document.getElementById("launch-tool-select");
+	const customInput = document.getElementById("launch-custom-cmd");
+	const launchBtn = document.getElementById("launch-all-btn");
+
+	const TOOL_COMMANDS = {
+		claude: "claude\n",
+		gemini: "gemini\n",
+	};
+
+	toolSelect.addEventListener("change", () => {
+		customInput.style.display = toolSelect.value === "custom" ? "block" : "none";
+	});
+
+	async function launchAll() {
+		let cmd;
+		if (toolSelect.value === "custom") {
+			const raw = customInput.value.trim();
+			if (!raw) return;
+			cmd = raw + "\n";
+		} else {
+			cmd = TOOL_COMMANDS[toolSelect.value] || (toolSelect.value + "\n");
+		}
+
+		const termTiles = tiles.filter((t) => t.type === "term" && t.ptySessionId);
+		for (const tile of termTiles) {
+			await window.shellApi.ptyWrite(tile.ptySessionId, cmd);
+		}
+	}
+
+	launchBtn.addEventListener("click", launchAll);
+
+	window.addEventListener("keydown", (e) => {
+		const isMac = navigator.platform.toUpperCase().includes("MAC");
+		const mod = isMac ? e.metaKey : e.ctrlKey;
+		if (mod && e.shiftKey && e.key.toLowerCase() === "l") {
+			e.preventDefault();
+			launchAll();
+		}
+	});
+})();

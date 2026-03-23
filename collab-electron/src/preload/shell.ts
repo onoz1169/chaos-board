@@ -198,6 +198,12 @@ contextBridge.exposeInMainWorld("shellApi", {
     items: Array<{ id: string; label: string; enabled?: boolean }>,
   ) => ipcRenderer.invoke("context-menu:show", items),
 
+  writeFile: (path: string, content: string): Promise<unknown> =>
+    ipcRenderer.invoke("fs:writefile", path, content),
+
+  ptyWrite: (sessionId: string, data: string): Promise<void> =>
+    ipcRenderer.invoke("pty:write", { sessionId, data }),
+
   openExternal: (url: string) => ipcRenderer.send("shell:open-external", url),
 
   trackEvent: (name: string, properties?: Record<string, unknown>) => {

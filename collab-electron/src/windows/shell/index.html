@@ -67,6 +67,16 @@
 		</div>
 	</div>
 
+	<div id="launch-toolbar">
+		<select id="launch-tool-select">
+			<option value="claude">claude</option>
+			<option value="gemini">gemini</option>
+			<option value="custom">custom...</option>
+		</select>
+		<input type="text" id="launch-custom-cmd" placeholder="command" style="display:none" />
+		<button type="button" id="launch-all-btn" title="Send command to all terminal tiles (Cmd+Shift+L)">&#9889; Launch All</button>
+	</div>
+
 	<div id="resize-overlay"></div>
 
 	<div id="loading-overlay">
