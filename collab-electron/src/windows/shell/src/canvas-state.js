@@ -1,5 +1,5 @@
 /**
- * @typedef {'term' | 'note' | 'code' | 'image' | 'graph' | 'browser'} TileType
+ * @typedef {'term' | 'note' | 'code' | 'image' | 'graph' | 'browser' | 'text'} TileType
  *
  * @typedef {Object} Tile
  * @property {string} id
@@ -14,6 +14,8 @@
  * @property {string} [cwd] - Working directory for terminal tiles
  * @property {string} [ptySessionId] - PTY session ID for terminal tiles
  * @property {string} [label] - Custom display name (for term tiles)
+ * @property {string} [content] - Text content for sticky note tiles
+ * @property {string} [noteColor] - Background color for sticky note tiles
  * @property {number} zIndex - Stacking order
  */
 
@@ -29,6 +31,7 @@ const DEFAULT_TILE_SIZES = {
 	image: { width: 280, height: 280 },
 	graph: { width: 600, height: 500 },
 	browser: { width: 480, height: 640 },
+	text: { width: 200, height: 200 },
 };
 
 /** @param {TileType} type */

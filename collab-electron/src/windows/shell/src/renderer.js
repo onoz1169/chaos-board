@@ -522,6 +522,8 @@ async function init() {
 				ptySessionId: t.ptySessionId,
 				url: t.url,
 				label: t.label,
+				content: t.content,
+				noteColor: t.noteColor,
 				zIndex: t.zIndex,
 			})),
 			viewport: {
@@ -1004,6 +1006,39 @@ async function init() {
 		return tile;
 	}
 
+	function createTextTile(cx, cy, content = "", noteColor = "#FFF3B0") {
+		const tile = createCanvasTile("text", cx, cy, { content, noteColor });
+		const dom = tileDOMs.get(tile.id);
+		if (!dom) return;
+
+		// Apply background color
+		dom.container.style.setProperty("--sticky-color", noteColor);
+
+		// Set initial content and wire up input handler
+		const textEl = dom.contentArea.querySelector(".sticky-text");
+		if (textEl) {
+			textEl.textContent = content;
+			textEl.addEventListener("input", () => {
+				tile.content = textEl.textContent;
+				saveCanvasDebounced();
+			});
+		}
+
+		// Wire up color buttons
+		const colorBtns = dom.container.querySelectorAll(".sticky-color-btn");
+		colorBtns.forEach((btn) => {
+			btn.addEventListener("click", (e) => {
+				e.stopPropagation();
+				const color = btn.dataset.color;
+				tile.noteColor = color;
+				dom.container.style.setProperty("--sticky-color", color);
+				saveCanvasImmediate();
+			});
+		});
+
+		saveCanvasImmediate();
+	}
+
 	function closeCanvasTile(id) {
 		const dom = tileDOMs.get(id);
 
@@ -1399,6 +1434,7 @@ async function init() {
 		const selected = await window.shellApi.showContextMenu([
 			{ id: "new-terminal", label: "New terminal tile" },
 			{ id: "new-text", label: "New text tile" },
+			{ id: "new-sticky", label: "New sticky note" },
 			{ id: "new-browser", label: "New browser tile" },
 		]);
 
@@ -1415,6 +1451,8 @@ async function init() {
 			const writeResult = await window.shellApi.writeFile(filePath, "");
 			if (!writeResult || !writeResult.ok) return;
 			createFileTile("note", cx, cy, filePath);
+		} else if (selected === "new-sticky") {
+			createTextTile(cx, cy);
 		} else if (selected === "new-browser") {
 			const tile = createCanvasTile("browser", cx, cy);
 			spawnBrowserWebview(tile, true);
@@ -1798,6 +1836,12 @@ async function init() {
 				},
 				);
 				spawnBrowserWebview(tile);
+			} else if (savedTile.type === "text") {
+				createTextTile(
+					savedTile.x, savedTile.y,
+					savedTile.content || "",
+					savedTile.noteColor || "#FFF3B0",
+				);
 			} else if (savedTile.filePath) {
 				createFileTile(
 					savedTile.type, savedTile.x, savedTile.y, savedTile.filePath,

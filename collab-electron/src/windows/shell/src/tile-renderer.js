@@ -7,7 +7,84 @@
  * @param {((id: string) => void)|null} [callbacks.onOpenInViewer]
  * @param {((id: string, url: string) => void)|null} [callbacks.onNavigate]
  */
+const STICKY_COLORS = [
+  "#FFF3B0",
+  "#B0F0C8",
+  "#FFB3C1",
+  "#B3D9FF",
+  "#E0B3FF",
+];
+
 export function createTileDOM(tile, callbacks) {
+  // -- Sticky note tile --
+  if (tile.type === "text") {
+    const container = document.createElement("div");
+    container.className = "canvas-tile";
+    container.dataset.tileId = tile.id;
+    container.dataset.tileType = tile.type;
+    container.style.setProperty("--sticky-color", tile.noteColor || "#FFF3B0");
+
+    const titleBar = document.createElement("div");
+    titleBar.className = "tile-title-bar";
+
+    const colorPicker = document.createElement("div");
+    colorPicker.className = "sticky-color-picker";
+    for (const color of STICKY_COLORS) {
+      const btn = document.createElement("button");
+      btn.className = "sticky-color-btn";
+      btn.dataset.color = color;
+      btn.style.setProperty("--btn-color", color);
+      btn.title = color;
+      btn.addEventListener("mousedown", (e) => e.stopPropagation());
+      colorPicker.appendChild(btn);
+    }
+    titleBar.appendChild(colorPicker);
+
+    const btnGroup = document.createElement("div");
+    btnGroup.className = "tile-btn-group";
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "tile-action-btn tile-close-btn";
+    closeBtn.innerHTML = "&times;";
+    closeBtn.title = "Close tile";
+    closeBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+    closeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      callbacks.onClose(tile.id);
+    });
+    btnGroup.appendChild(closeBtn);
+    titleBar.appendChild(btnGroup);
+
+    const contentArea = document.createElement("div");
+    contentArea.className = "tile-content";
+
+    const textEl = document.createElement("div");
+    textEl.className = "sticky-text";
+    textEl.contentEditable = "true";
+    textEl.setAttribute("placeholder", "メモ...");
+    contentArea.appendChild(textEl);
+
+    const contentOverlay = document.createElement("div");
+    contentOverlay.className = "tile-content-overlay";
+    contentArea.appendChild(contentOverlay);
+
+    container.appendChild(titleBar);
+    container.appendChild(contentArea);
+
+    return {
+      container,
+      titleBar,
+      titleText: null,
+      contentArea,
+      contentOverlay,
+      closeBtn,
+      urlInput: undefined,
+      navBack: undefined,
+      navForward: undefined,
+      navReload: undefined,
+    };
+  }
+
+  // -- Standard tile --
   const container = document.createElement("div");
   container.className = "canvas-tile";
   container.dataset.tileId = tile.id;
