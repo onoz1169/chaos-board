@@ -115,6 +115,76 @@ export function createTileDOM(tile, callbacks) {
     };
   }
 
+  // -- Draw (freehand) tile --
+  if (tile.type === "draw") {
+    const container = document.createElement("div");
+    container.className = "canvas-tile draw-tile";
+    container.dataset.tileId = tile.id;
+    container.dataset.tileType = tile.type;
+
+    const titleBar = document.createElement("div");
+    titleBar.className = "tile-title-bar";
+
+    const titleText = document.createElement("span");
+    titleText.className = "tile-title-text";
+    titleText.textContent = tile.label || "Draw";
+
+    const btnGroup = document.createElement("div");
+    btnGroup.className = "tile-btn-group";
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "tile-action-btn tile-close-btn";
+    closeBtn.innerHTML = "&times;";
+    closeBtn.title = "Close tile";
+    closeBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+    closeBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      callbacks.onClose(tile.id);
+    });
+    btnGroup.appendChild(closeBtn);
+
+    titleBar.appendChild(titleText);
+    titleBar.appendChild(btnGroup);
+
+    const contentArea = document.createElement("div");
+    contentArea.className = "tile-content draw-content";
+
+    // Toolbar container (populated externally by draw-toolbar.js)
+    const toolbarContainer = document.createElement("div");
+    toolbarContainer.className = "draw-toolbar-container";
+    contentArea.appendChild(toolbarContainer);
+
+    // Drawing canvas element
+    const drawCanvas = document.createElement("canvas");
+    drawCanvas.className = "draw-canvas";
+    drawCanvas.style.width = "100%";
+    drawCanvas.style.height = "100%";
+    drawCanvas.style.display = "block";
+    drawCanvas.style.touchAction = "none"; // Required for Pointer Events
+    contentArea.appendChild(drawCanvas);
+
+    // Content overlay for drag behavior (above canvas when not drawing)
+    const contentOverlay = document.createElement("div");
+    contentOverlay.className = "tile-content-overlay";
+    contentOverlay.style.pointerEvents = "none"; // Drawing mode: let pointer events through to canvas
+    contentArea.appendChild(contentOverlay);
+
+    container.appendChild(titleBar);
+    container.appendChild(contentArea);
+
+    appendConnectionHandles(container);
+
+    return {
+      container,
+      titleBar,
+      contentArea,
+      contentOverlay,
+      webview: null,
+      drawCanvas,
+      toolbarContainer,
+    };
+  }
+
   // -- Standard tile --
   const container = document.createElement("div");
   container.className = "canvas-tile";
