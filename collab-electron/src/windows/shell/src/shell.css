@@ -2013,8 +2013,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   background: transparent;
   border: 1.5px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
@@ -2067,8 +2067,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 6px;
