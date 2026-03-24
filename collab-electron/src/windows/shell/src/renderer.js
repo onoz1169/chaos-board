@@ -26,6 +26,8 @@ import {
 	initConnectionLayer, renderConnections,
 	startConnectionDrag, cleanupConnectionLayer,
 } from "./connection-renderer.js";
+import { attachDrawing, restoreDrawing, clearDrawing } from "./draw-interactions.js";
+import { createDrawToolbar } from "./draw-toolbar.js";
 
 // -- Dark mode --
 
@@ -627,6 +629,7 @@ async function init() {
 				content: t.content,
 				noteColor: t.noteColor,
 				fontSize: t.fontSize,
+				imageData: t.imageData,
 				zIndex: t.zIndex,
 			})),
 			viewport: {
@@ -1033,6 +1036,39 @@ async function init() {
 		if (autoFocus) {
 			wv.addEventListener("dom-ready", () => focusCanvasTile(tile.id));
 		}
+	}
+
+	function createDrawTile(cx, cy, imageData, extra = {}) {
+		const tile = createCanvasTile("draw", cx, cy, extra);
+		const dom = tileDOMs.get(tile.id);
+		if (!dom || !dom.drawCanvas || !dom.toolbarContainer) return tile;
+
+		const toolbar = createDrawToolbar(dom.toolbarContainer, {
+			onClear: () => {
+				clearDrawing(dom.drawCanvas);
+				tile.imageData = null;
+				saveCanvasDebounced();
+			},
+		});
+
+		attachDrawing(dom.drawCanvas, tile, {
+			getColor: toolbar.getColor,
+			getBrushSize: toolbar.getBrushSize,
+			getTool: toolbar.getTool,
+			onStrokeEnd: (dataURL) => {
+				tile.imageData = dataURL;
+				saveCanvasDebounced();
+			},
+		});
+
+		if (imageData) {
+			tile.imageData = imageData;
+			// Wait for canvas to be sized before restoring
+			requestAnimationFrame(() => restoreDrawing(dom.drawCanvas, imageData));
+		}
+
+		saveCanvasImmediate();
+		return tile;
 	}
 
 	function createCanvasTile(type, canvasXPos, canvasYPos, extra = {}) {
@@ -1698,6 +1734,7 @@ async function init() {
 			{ id: "new-text", label: "\uFF0B Text file" },
 			{ id: "new-sticky", label: "\uFF0B Sticky note" },
 			{ id: "new-browser", label: "\uFF0B Browser" },
+			{ id: "new-draw", label: "\uFF0B Draw" },
 		];
 		const selTiles = getSelectedTiles();
 		if (selTiles.length >= 2 || (selTiles.length > 0 && selTiles.some((t) => getGroupForTile(t.id)))) {
@@ -1730,6 +1767,8 @@ async function init() {
 			const tile = createCanvasTile("browser", cx, cy);
 			spawnBrowserWebview(tile, true);
 			saveCanvasImmediate();
+		} else if (selected === "new-draw") {
+			createDrawTile(cx, cy);
 		} else if (selected === "group-tiles") {
 			groupSelectedTiles();
 		} else if (selected === "ungroup-tiles") {
@@ -2119,6 +2158,17 @@ async function init() {
 					savedTile.content || "",
 					savedTile.noteColor || "#FFF3B0",
 					savedTile.fontSize || 14,
+				);
+			} else if (savedTile.type === "draw") {
+				createDrawTile(
+					savedTile.x, savedTile.y,
+					savedTile.imageData || null,
+					{
+						id: savedTile.id,
+						width: savedTile.width,
+						height: savedTile.height,
+						zIndex: savedTile.zIndex,
+					},
 				);
 			} else if (savedTile.filePath) {
 				createFileTile(
@@ -2546,6 +2596,31 @@ async function init() {
 				const newTile = createCanvasTile(src.type, newX, newY, extra);
 				if (src.type === "term") {
 					spawnTerminalWebview(newTile, false);
+				}
+				else if (src.type === "draw") {
+					const dom = tileDOMs.get(newTile.id);
+					if (dom && dom.drawCanvas && dom.toolbarContainer) {
+						const toolbar = createDrawToolbar(dom.toolbarContainer, {
+							onClear: () => {
+								clearDrawing(dom.drawCanvas);
+								newTile.imageData = null;
+								saveCanvasDebounced();
+							},
+						});
+						attachDrawing(dom.drawCanvas, newTile, {
+							getColor: toolbar.getColor,
+							getBrushSize: toolbar.getBrushSize,
+							getTool: toolbar.getTool,
+							onStrokeEnd: (dataURL) => {
+								newTile.imageData = dataURL;
+								saveCanvasDebounced();
+							},
+						});
+						if (src.imageData) {
+							newTile.imageData = src.imageData;
+							requestAnimationFrame(() => restoreDrawing(dom.drawCanvas, src.imageData));
+						}
+					}
 				}
 				selectTile(newTile.id);
 			}
@@ -3155,6 +3230,7 @@ init();
 		{ keys: "Delete / Backspace", desc: "Delete selected tiles" },
 		{ keys: "\u2318C", desc: "Copy selected tiles" },
 		{ keys: "\u2318V", desc: "Paste tiles" },
+		{ keys: "Right-click \u2192 Draw", desc: "New draw tile (freehand)" },
 		{ keys: "\u2318G", desc: "Group selected tiles" },
 		{ keys: "\u2318\u21E7G", desc: "Ungroup" },
 		{ keys: "\u2318\u21E7L", desc: "Launch All" },
