@@ -39,6 +39,7 @@ export function attachDrag(titleBar, tile, {
   onFocus,
   isSpaceHeld,
   contentOverlay,
+  isSelected,
 }) {
   function startDrag(e, { deferFocus = false } = {}) {
     if (e.button !== 0) return;
@@ -121,18 +122,37 @@ export function attachDrag(titleBar, tile, {
   titleBar.addEventListener("mousedown", (e) => startDrag(e));
 
   if (contentOverlay) {
-    // Sticky note tiles use contenteditable for direct text input. The overlay
-    // must not intercept any pointer events for these tiles — dragging is
-    // handled solely by the titleBar. Skip mousedown registration entirely.
     const isStickyNote = tile.type === "text";
     if (!isStickyNote) {
       contentOverlay.addEventListener("mousedown", (e) => {
-        // Do not intercept clicks targeting a contenteditable element (e.g. sticky
-        // note text area) — let the event reach the editable so it can receive focus.
         if (e.target.isContentEditable || e.target.closest("[contenteditable]")) return;
         startDrag(e, { deferFocus: true });
       });
     }
+  }
+
+  // Sticky notes: when selected as part of multi-selection, allow drag from
+  // the content area (override contenteditable behavior for group moves).
+  if (tile.type === "text") {
+    const stickyText = titleBar.closest(".canvas-tile")?.querySelector(".sticky-text");
+    if (stickyText) {
+      stickyText.addEventListener("mousedown", (e) => {
+        if (isSelected?.() && getGroupDragContext()?.length > 1) {
+          e.preventDefault();
+          startDrag(e);
+        }
+      });
+    }
+  }
+
+  // Allow drag from the container border area (the tile frame itself).
+  // Only triggers when clicking directly on the container element, not on children.
+  const container = titleBar.closest(".canvas-tile");
+  if (container) {
+    container.addEventListener("mousedown", (e) => {
+      if (e.target !== container) return;
+      startDrag(e);
+    });
   }
 }
 

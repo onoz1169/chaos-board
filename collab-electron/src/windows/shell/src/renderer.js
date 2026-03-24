@@ -10,6 +10,22 @@ import {
 	updateTileTitle, getTileLabel,
 } from "./tile-renderer.js";
 import { attachDrag, attachResize, attachMarquee } from "./tile-interactions.js";
+import {
+	groups, addGroup, removeGroup, getGroupForTile,
+	removeTileFromGroup, clearGroups, toJSON as groupsToJSON,
+	fromJSON as groupsFromJSON,
+} from "./group-state.js";
+import { initGroupLayer, renderGroups } from "./group-renderer.js";
+import { initZoneLayer, repositionZones, getTilesInZone, getZoneAtPoint, flashZone } from "./zone-renderer.js";
+import {
+	connections, addConnection, removeConnection,
+	getConnectionsForTile, clearConnections,
+	toJSON as connectionsToJSON, fromJSON as connectionsFromJSON,
+} from "./connection-state.js";
+import {
+	initConnectionLayer, renderConnections,
+	startConnectionDrag, cleanupConnectionLayer,
+} from "./connection-renderer.js";
 
 // -- Dark mode --
 
@@ -485,6 +501,92 @@ async function init() {
 		document.getElementById("loading-status");
 
 	const tileLayer = document.getElementById("tile-layer");
+	const groupLayer = document.getElementById("group-layer");
+	initZoneLayer();
+
+	// Long-press anywhere on canvas (including on tiles) to select all tiles in that zone
+	{
+		const LONG_PRESS_MS = 400;
+		let pressTimer = null;
+		let pressStartX = 0;
+		let pressStartY = 0;
+
+		canvasEl.addEventListener("mousedown", (e) => {
+			if (e.button !== 0) return;
+			if (spaceHeld) return;
+			pressStartX = e.clientX;
+			pressStartY = e.clientY;
+
+			pressTimer = setTimeout(() => {
+				pressTimer = null;
+				// Convert screen coords to canvas coords
+				const rect = canvasEl.getBoundingClientRect();
+				const cx = (e.clientX - rect.left - canvasX) / canvasScale;
+				const cy = (e.clientY - rect.top - canvasY) / canvasScale;
+				const zone = getZoneAtPoint(cx, cy);
+				if (!zone) return;
+
+				const ids = getTilesInZone(zone.id, tiles);
+				if (ids.length === 0) return;
+
+				clearSelection();
+				for (const id of ids) selectTile(id);
+				syncSelectionVisuals();
+				flashZone(zone.id);
+			}, LONG_PRESS_MS);
+		}, true);  // capture phase to fire before tile handlers
+
+		canvasEl.addEventListener("mousemove", (e) => {
+			if (!pressTimer) return;
+			const dist = Math.hypot(e.clientX - pressStartX, e.clientY - pressStartY);
+			if (dist > 5) {
+				clearTimeout(pressTimer);
+				pressTimer = null;
+			}
+		}, true);
+
+		canvasEl.addEventListener("mouseup", () => {
+			if (pressTimer) {
+				clearTimeout(pressTimer);
+				pressTimer = null;
+			}
+		}, true);
+	}
+	initGroupLayer(canvasEl);
+	initConnectionLayer(canvasEl);
+
+	// -- Group/ungroup helpers --
+
+	function groupSelectedTiles() {
+		const sel = getSelectedTiles();
+		if (sel.length < 2) return;
+		addGroup(sel.map((t) => t.id));
+		repositionAllTiles();
+		saveCanvasImmediate();
+	}
+
+	function ungroupSelectedTiles() {
+		const sel = getSelectedTiles();
+		const gids = new Set();
+		for (const t of sel) {
+			const g = getGroupForTile(t.id);
+			if (g) gids.add(g.id);
+		}
+		if (gids.size === 0) return;
+		for (const gid of gids) removeGroup(gid);
+		repositionAllTiles();
+		saveCanvasImmediate();
+	}
+
+	// Listen for ungroup button clicks dispatched from group-renderer
+	groupLayer.addEventListener("group-ungroup", (e) => {
+		const { groupId } = e.detail;
+		if (groupId) {
+			removeGroup(groupId);
+			repositionAllTiles();
+			saveCanvasImmediate();
+		}
+	});
 	/** @type {Map<string, {container: HTMLElement, contentArea: HTMLElement, titleText: HTMLElement, webview?: HTMLElement}>} */
 	const tileDOMs = new Map();
 	const viewport = {
@@ -532,6 +634,8 @@ async function init() {
 				panY: canvasY,
 				zoom: canvasScale,
 			},
+			groups: groupsToJSON(),
+			connections: connectionsToJSON(),
 		};
 	}
 
@@ -677,6 +781,9 @@ async function init() {
 			if (!dom) continue;
 			positionTile(dom.container, tile, canvasX, canvasY, canvasScale);
 		}
+		repositionZones(canvasX, canvasY, canvasScale);
+		renderGroups(groups, tiles, canvasX, canvasY, canvasScale);
+		renderConnections(connections, tiles, canvasX, canvasY, canvasScale);
 	}
 
 	function spawnTerminalWebview(tile, autoFocus = false) {
@@ -717,6 +824,21 @@ async function init() {
 			if (event.channel === "pty-session-id") {
 				tile.ptySessionId = event.args[0];
 				saveCanvasDebounced();
+			}
+			if (event.channel === "pty-exited") {
+				const exitCode = event.args[1];
+				const statusDot = dom.container.querySelector(".tile-term-status");
+				if (statusDot) {
+					if (exitCode === 0 || exitCode === undefined) {
+						statusDot.classList.add("stopped");
+						statusDot.classList.remove("error");
+						statusDot.title = "Stopped";
+					} else {
+						statusDot.classList.add("error");
+						statusDot.classList.remove("stopped");
+						statusDot.title = "Error";
+					}
+				}
 			}
 		});
 	}
@@ -960,6 +1082,7 @@ async function init() {
 			},
 		});
 
+		// Drag from title bar AND from container border area
 		attachDrag(dom.titleBar, tile, {
 			viewport,
 			onUpdate: repositionAllTiles,
@@ -971,15 +1094,21 @@ async function init() {
 			},
 			getAllWebviews,
 			getGroupDragContext: () => {
-				if (!isSelected(tile.id) || getSelectedTiles().length <= 1) {
-					return null;
+				// Collect tiles to move: selection + persistent group members
+				const dragIds = new Set();
+				if (isSelected(tile.id)) {
+					for (const st of getSelectedTiles()) dragIds.add(st.id);
 				}
-				return getSelectedTiles().map((t) => ({
-					tile: t,
-					container: tileDOMs.get(t.id)?.container,
-					startX: t.x,
-					startY: t.y,
-				}));
+				// Always include persistent group members of the dragged tile
+				const pg = getGroupForTile(tile.id);
+				if (pg) {
+					for (const gid of pg.tileIds) dragIds.add(gid);
+				}
+				if (dragIds.size <= 1) return null;
+				return [...dragIds].map((id) => {
+					const t = getTile(id);
+					return t ? { tile: t, container: tileDOMs.get(id)?.container, startX: t.x, startY: t.y } : null;
+				}).filter(Boolean);
 			},
 			onShiftClick: (id) => {
 				toggleTileSelection(id);
@@ -988,6 +1117,7 @@ async function init() {
 			onFocus: (id, e) => focusCanvasTile(id, e),
 			isSpaceHeld: () => spaceHeld,
 			contentOverlay: dom.contentOverlay,
+			isSelected: () => isSelected(tile.id),
 		});
 		attachResize(
 			dom.container, tile, viewport,
@@ -1040,18 +1170,6 @@ async function init() {
 			}, { passive: false });
 		}
 
-		// Wire up color buttons
-		const colorBtns = dom.container.querySelectorAll(".sticky-color-btn");
-		colorBtns.forEach((btn) => {
-			btn.addEventListener("click", (e) => {
-				e.stopPropagation();
-				const color = btn.dataset.color;
-				tile.noteColor = color;
-				dom.container.style.setProperty("--sticky-color", color);
-				saveCanvasImmediate();
-			});
-		});
-
 		// Wire up A- / A+ buttons
 		const fontDownBtn = dom.container.querySelector(".sticky-font-down");
 		const fontUpBtn = dom.container.querySelector(".sticky-font-up");
@@ -1080,6 +1198,11 @@ async function init() {
 		}
 
 		deselectTile(id);
+		removeTileFromGroup(id);
+		// Remove all connections involving this tile
+		for (const conn of getConnectionsForTile(id)) {
+			removeConnection(conn.id);
+		}
 		const tile = getTile(id);
 		if (tile) window.shellApi.trackEvent("tile_closed", { type: tile.type });
 		removeTile(id);
@@ -1425,6 +1548,46 @@ async function init() {
 
 	updateEdgeIndicators();
 
+	// -- Connection handle drag --
+	canvasEl.addEventListener("mousedown", (e) => {
+		const handle = e.target.closest(".tile-conn-handle");
+		if (!handle) return;
+		e.preventDefault();
+		e.stopPropagation();
+		const tileEl = handle.closest(".canvas-tile");
+		if (!tileEl) return;
+		const fromTileId = tileEl.dataset.tileId;
+		const fromEdge = handle.dataset.edge;
+		if (!fromTileId || !fromEdge) return;
+		canvasEl.classList.add("connection-dragging");
+		const rect = handle.getBoundingClientRect();
+		const startX = rect.left + rect.width / 2;
+		const startY = rect.top + rect.height / 2;
+		startConnectionDrag(fromTileId, fromEdge, startX, startY,
+			(toTileId, toEdge) => {
+				canvasEl.classList.remove("connection-dragging");
+				addConnection({ fromTileId, fromEdge, toTileId, toEdge });
+				renderConnections(connections, tiles, canvasX, canvasY, canvasScale);
+				saveCanvasImmediate();
+			},
+			() => { canvasEl.classList.remove("connection-dragging"); },
+		);
+	}, true);
+
+	// -- Right-click to delete connection --
+	canvasEl.addEventListener("contextmenu", (e) => {
+		const path = e.target.closest(".connection-path");
+		if (!path) return;
+		e.preventDefault();
+		e.stopPropagation();
+		const connId = path.dataset.connectionId;
+		if (connId) {
+			removeConnection(connId);
+			renderConnections(connections, tiles, canvasX, canvasY, canvasScale);
+			saveCanvasImmediate();
+		}
+	});
+
 	// -- Double-click to create terminal tile --
 
 	canvasEl.addEventListener("dblclick", (e) => {
@@ -1451,10 +1614,77 @@ async function init() {
 		saveCanvasImmediate();
 	});
 
-	// -- Right-click context menu on canvas --
+	// -- Right-click context menu on canvas (custom HTML menu) --
+
+	const ctxMenu = document.getElementById("canvas-context-menu");
+
+	function showCanvasContextMenu(x, y, items) {
+		ctxMenu.innerHTML = "";
+		return new Promise((resolve) => {
+			for (const item of items) {
+				if (item.separator) {
+					const sep = document.createElement("div");
+					sep.className = "ctx-menu-separator";
+					ctxMenu.appendChild(sep);
+					continue;
+				}
+				const btn = document.createElement("button");
+				btn.className = "ctx-menu-item";
+				btn.textContent = item.label;
+				btn.addEventListener("click", () => {
+					hideCanvasContextMenu();
+					resolve(item.id);
+				});
+				ctxMenu.appendChild(btn);
+			}
+
+			// Position menu, keeping it within viewport
+			ctxMenu.style.left = `${x}px`;
+			ctxMenu.style.top = `${y}px`;
+			ctxMenu.classList.add("visible");
+
+			// Adjust if overflowing viewport
+			requestAnimationFrame(() => {
+				const menuRect = ctxMenu.getBoundingClientRect();
+				if (menuRect.right > window.innerWidth) {
+					ctxMenu.style.left = `${x - menuRect.width}px`;
+				}
+				if (menuRect.bottom > window.innerHeight) {
+					ctxMenu.style.top = `${y - menuRect.height}px`;
+				}
+			});
+
+			function onDismiss(ev) {
+				if (!ctxMenu.contains(ev.target)) {
+					hideCanvasContextMenu();
+					resolve(null);
+				}
+			}
+			function onEscape(ev) {
+				if (ev.key === "Escape") {
+					hideCanvasContextMenu();
+					resolve(null);
+				}
+			}
+			function hideCanvasContextMenu() {
+				ctxMenu.classList.remove("visible");
+				document.removeEventListener("mousedown", onDismiss, true);
+				document.removeEventListener("keydown", onEscape, true);
+			}
+			// Delay listener attachment so the triggering event doesn't immediately dismiss
+			setTimeout(() => {
+				document.addEventListener("mousedown", onDismiss, true);
+				document.addEventListener("keydown", onEscape, true);
+			}, 0);
+		});
+	}
 
 	canvasEl.addEventListener("contextmenu", async (e) => {
-		if (e.target !== canvasEl && e.target !== gridCanvas && e.target !== tileLayer) return;
+		if (
+			e.target !== canvasEl && e.target !== gridCanvas &&
+			e.target !== tileLayer && e.target !== groupLayer &&
+			!e.target.closest("#group-layer")
+		) return;
 		e.preventDefault();
 
 		const rect = canvasEl.getBoundingClientRect();
@@ -1463,12 +1693,23 @@ async function init() {
 		const cx = (screenX - canvasX) / canvasScale;
 		const cy = (screenY - canvasY) / canvasScale;
 
-		const selected = await window.shellApi.showContextMenu([
-			{ id: "new-terminal", label: "New terminal tile" },
-			{ id: "new-text", label: "New text tile" },
-			{ id: "new-sticky", label: "New sticky note" },
-			{ id: "new-browser", label: "New browser tile" },
-		]);
+		const menuItems = [
+			{ id: "new-terminal", label: "\uFF0B Terminal" },
+			{ id: "new-text", label: "\uFF0B Text file" },
+			{ id: "new-sticky", label: "\uFF0B Sticky note" },
+			{ id: "new-browser", label: "\uFF0B Browser" },
+		];
+		const selTiles = getSelectedTiles();
+		if (selTiles.length >= 2 || (selTiles.length > 0 && selTiles.some((t) => getGroupForTile(t.id)))) {
+			menuItems.push({ separator: true });
+		}
+		if (selTiles.length >= 2) {
+			menuItems.push({ id: "group-tiles", label: "Group tiles (\u2318G)" });
+		}
+		if (selTiles.length > 0 && selTiles.some((t) => getGroupForTile(t.id))) {
+			menuItems.push({ id: "ungroup-tiles", label: "Ungroup (\u2318\u21E7G)" });
+		}
+		const selected = await showCanvasContextMenu(e.clientX, e.clientY, menuItems);
 
 		if (selected === "new-terminal") {
 			const ws = getActiveWorkspace();
@@ -1489,6 +1730,10 @@ async function init() {
 			const tile = createCanvasTile("browser", cx, cy);
 			spawnBrowserWebview(tile, true);
 			saveCanvasImmediate();
+		} else if (selected === "group-tiles") {
+			groupSelectedTiles();
+		} else if (selected === "ungroup-tiles") {
+			ungroupSelectedTiles();
 		}
 	});
 
@@ -1881,6 +2126,18 @@ async function init() {
 				);
 			}
 		}
+
+		// Restore persistent groups
+		if (savedState.groups) {
+			groupsFromJSON(savedState.groups);
+			renderGroups(groups, tiles, canvasX, canvasY, canvasScale);
+		}
+
+		// Restore persistent connections
+		if (savedState.connections) {
+			connectionsFromJSON(savedState.connections);
+			renderConnections(connections, tiles, canvasX, canvasY, canvasScale);
+		}
 	}
 
 	// -- Initialize workspaces --
@@ -2171,6 +2428,42 @@ async function init() {
 	// -- Selection keyboard handlers --
 
 	window.addEventListener("keydown", (e) => {
+		// Cmd+G = group selected tiles
+		if (e.key === "g" && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
+			if (getSelectedTiles().length >= 2) {
+				e.preventDefault();
+				groupSelectedTiles();
+				return;
+			}
+		}
+		// Cmd+Shift+G = ungroup selected tiles
+		if (e.key === "g" && (e.metaKey || e.ctrlKey) && e.shiftKey) {
+			const sel = getSelectedTiles();
+			if (sel.length > 0 && sel.some((t) => getGroupForTile(t.id))) {
+				e.preventDefault();
+				ungroupSelectedTiles();
+				return;
+			}
+		}
+
+		// Arrow keys: move selected tiles
+		if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+			const sel = getSelectedTiles();
+			if (sel.length > 0) {
+				e.preventDefault();
+				const step = e.shiftKey ? 40 : 20;
+				for (const t of sel) {
+					if (e.key === "ArrowUp") t.y -= step;
+					if (e.key === "ArrowDown") t.y += step;
+					if (e.key === "ArrowLeft") t.x -= step;
+					if (e.key === "ArrowRight") t.x += step;
+				}
+				repositionAllTiles();
+				saveCanvasDebounced();
+				return;
+			}
+		}
+
 		if (e.key === "Escape" && getSelectedTiles().length > 0) {
 			clearSelection();
 			syncSelectionVisuals();
@@ -2195,6 +2488,71 @@ async function init() {
 				clearSelection();
 				syncSelectionVisuals();
 			});
+		}
+	});
+
+	// -- Copy / Paste (Cmd+C / Cmd+V) --
+
+	let clipboardTiles = [];
+	let pasteOffset = 0;
+
+	window.addEventListener("keydown", (e) => {
+		const isMac = navigator.platform.toUpperCase().includes("MAC");
+		const mod = isMac ? e.metaKey : e.ctrlKey;
+		if (!mod) return;
+
+		// Don't interfere with text editing (sticky notes, inputs)
+		const focused = document.activeElement;
+		const isEditingText =
+			focused &&
+			(focused.isContentEditable ||
+				focused.tagName === "INPUT" ||
+				focused.tagName === "TEXTAREA");
+		if (isEditingText) return;
+
+		if (
+			e.key === "c" &&
+			(activeSurface === "canvas" || activeSurface === "canvas-tile")
+		) {
+			const selected = getSelectedTiles();
+			if (selected.length === 0) return;
+			e.preventDefault();
+			clipboardTiles = selected.map((t) => ({ ...t }));
+			pasteOffset = 0;
+			return;
+		}
+
+		if (
+			e.key === "v" &&
+			clipboardTiles.length > 0 &&
+			(activeSurface === "canvas" || activeSurface === "canvas-tile")
+		) {
+			e.preventDefault();
+			pasteOffset += 40;
+			clearSelection();
+			for (const src of clipboardTiles) {
+				const newX = src.x + pasteOffset;
+				const newY = src.y + pasteOffset;
+				const extra = { width: src.width, height: src.height };
+				if (src.filePath !== undefined) extra.filePath = src.filePath;
+				if (src.folderPath !== undefined) extra.folderPath = src.folderPath;
+				if (src.workspacePath !== undefined) extra.workspacePath = src.workspacePath;
+				if (src.url !== undefined) extra.url = src.url;
+				if (src.label !== undefined) extra.label = src.label;
+				if (src.content !== undefined) extra.content = src.content;
+				if (src.noteColor !== undefined) extra.noteColor = src.noteColor;
+				if (src.fontSize !== undefined) extra.fontSize = src.fontSize;
+				if (src.cwd !== undefined) extra.cwd = src.cwd;
+				const newTile = createCanvasTile(src.type, newX, newY, extra);
+				if (src.type === "term") {
+					spawnTerminalWebview(newTile, false);
+				}
+				selectTile(newTile.id);
+			}
+			repositionAllTiles();
+			syncSelectionVisuals();
+			saveCanvasDebounced();
+			return;
 		}
 	});
 
@@ -2722,15 +3080,36 @@ init();
 	const launchBtn = document.getElementById("launch-all-btn");
 
 	const TOOL_COMMANDS = {
-		claude: "claude\n",
-		gemini: "gemini\n",
+		claude: "claude --dangerously-skip-permissions\n",
+		codex: "codex\n",
 	};
+
+	function updateLaunchBtnState() {
+		const hasTerms = tiles.some((t) => t.type === "term");
+		if (hasTerms) {
+			launchBtn.classList.remove("disabled");
+		} else {
+			launchBtn.classList.add("disabled");
+		}
+	}
+
+	// Initial state check
+	updateLaunchBtnState();
+
+	// Observe tile-layer for child additions/removals to update button state
+	const tileLayerEl = document.getElementById("tile-layer");
+	if (tileLayerEl) {
+		const observer = new MutationObserver(() => updateLaunchBtnState());
+		observer.observe(tileLayerEl, { childList: true });
+	}
 
 	toolSelect.addEventListener("change", () => {
 		customInput.style.display = toolSelect.value === "custom" ? "block" : "none";
 	});
 
 	async function launchAll() {
+		if (launchBtn.classList.contains("disabled")) return;
+
 		let cmd;
 		if (toolSelect.value === "custom") {
 			const raw = customInput.value.trim();
@@ -2741,9 +3120,16 @@ init();
 		}
 
 		const termTiles = tiles.filter((t) => t.type === "term" && t.ptySessionId);
+		if (termTiles.length === 0) return;
 		for (const tile of termTiles) {
 			await window.shellApi.ptyWrite(tile.ptySessionId, cmd);
 		}
+
+		// Visual pulse on success
+		launchBtn.classList.add("launch-pulse");
+		launchBtn.addEventListener("animationend", () => {
+			launchBtn.classList.remove("launch-pulse");
+		}, { once: true });
 	}
 
 	launchBtn.addEventListener("click", launchAll);
@@ -2756,4 +3142,83 @@ init();
 			launchAll();
 		}
 	});
+
+	// -- Keyboard shortcut help modal --
+
+	const shortcutModal = document.getElementById("shortcut-modal");
+	const shortcutBody = shortcutModal.querySelector(".shortcut-modal-body");
+	const shortcutCloseBtn = shortcutModal.querySelector(".shortcut-modal-close");
+	const helpBtn = document.getElementById("help-shortcut-btn");
+
+	const SHORTCUTS = [
+		{ keys: "Space + drag", desc: "Pan canvas" },
+		{ keys: "Delete / Backspace", desc: "Delete selected tiles" },
+		{ keys: "\u2318C", desc: "Copy selected tiles" },
+		{ keys: "\u2318V", desc: "Paste tiles" },
+		{ keys: "\u2318G", desc: "Group selected tiles" },
+		{ keys: "\u2318\u21E7G", desc: "Ungroup" },
+		{ keys: "\u2318\u21E7L", desc: "Launch All" },
+		{ keys: "Shift+Click", desc: "Multi-select" },
+		{ keys: "Double-click canvas", desc: "New terminal" },
+		{ keys: "Double-click title", desc: "Rename terminal" },
+		{ keys: "Right-click", desc: "Context menu" },
+		{ keys: "Arrow keys", desc: "Move selected tiles" },
+		{ keys: "Shift + Arrow", desc: "Move tiles faster" },
+		{ keys: "Long-press zone", desc: "Select all tiles in zone" },
+		{ keys: "Escape", desc: "Clear selection" },
+	];
+
+	// Populate rows
+	for (const s of SHORTCUTS) {
+		const row = document.createElement("div");
+		row.className = "shortcut-row";
+		const kbd = document.createElement("span");
+		kbd.className = "shortcut-keys";
+		kbd.textContent = s.keys;
+		const desc = document.createElement("span");
+		desc.className = "shortcut-desc";
+		desc.textContent = s.desc;
+		row.appendChild(kbd);
+		row.appendChild(desc);
+		shortcutBody.appendChild(row);
+	}
+
+	function showShortcutModal() {
+		shortcutModal.classList.add("visible");
+	}
+	function hideShortcutModal() {
+		shortcutModal.classList.remove("visible");
+	}
+
+	helpBtn.addEventListener("click", showShortcutModal);
+	shortcutCloseBtn.addEventListener("click", hideShortcutModal);
+	shortcutModal.addEventListener("click", (e) => {
+		if (e.target === shortcutModal) hideShortcutModal();
+	});
+	window.addEventListener("keydown", (e) => {
+		if (e.key === "Escape" && shortcutModal.classList.contains("visible")) {
+			hideShortcutModal();
+		}
+	});
+
+	// -- Empty canvas hint --
+
+	const emptyHint = document.getElementById("canvas-empty-hint");
+
+	function updateEmptyHint() {
+		if (tiles.length === 0) {
+			emptyHint.classList.add("visible");
+		} else {
+			emptyHint.classList.remove("visible");
+		}
+	}
+
+	// Watch tile-layer for child changes to toggle the hint
+	const tileLayerForHint = document.getElementById("tile-layer");
+	if (tileLayerForHint) {
+		new MutationObserver(updateEmptyHint).observe(tileLayerForHint, { childList: true });
+	}
+
+	// Initial check
+	updateEmptyHint();
 })();

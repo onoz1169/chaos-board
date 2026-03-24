@@ -86,6 +86,7 @@ function App() {
     }) => {
       if (payload.sessionId === sessionId) {
         setExited(true);
+        window.api.notifyPtyExited(payload.sessionId, payload.exitCode);
       }
     };
     window.api.onPtyExit(handleExit);

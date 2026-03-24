@@ -43,9 +43,13 @@
 		<div id="nav-resize" class="resize-handle" data-panel="nav"></div>
 		<div id="panel-viewer">
 			<canvas id="grid-canvas"></canvas>
+			<div id="zone-layer"></div>
+			<svg id="connection-layer" xmlns="http://www.w3.org/2000/svg"></svg>
+			<div id="group-layer"></div>
 			<div id="tile-layer"></div>
 			<div id="edge-indicators"></div>
 			<div id="zoom-indicator">100%</div>
+			<div id="canvas-context-menu"></div>
 		</div>
 	</div>
 
@@ -67,14 +71,27 @@
 		</div>
 	</div>
 
+	<div id="canvas-empty-hint">Right-click to add tiles &nbsp;|&nbsp; Double-click for terminal &nbsp;|&nbsp; ? for shortcuts</div>
+
 	<div id="launch-toolbar">
 		<select id="launch-tool-select">
-			<option value="claude">claude</option>
-			<option value="gemini">gemini</option>
+			<option value="claude">Claude Code (YOLO)</option>
+			<option value="codex">Codex</option>
 			<option value="custom">custom...</option>
 		</select>
 		<input type="text" id="launch-custom-cmd" placeholder="command" style="display:none" />
 		<button type="button" id="launch-all-btn" title="Send command to all terminal tiles (Cmd+Shift+L)">&#9889; Launch All</button>
+		<button type="button" id="help-shortcut-btn" title="Keyboard shortcuts">?</button>
+	</div>
+
+	<div id="shortcut-modal" class="shortcut-modal-overlay">
+		<div class="shortcut-modal">
+			<div class="shortcut-modal-header">
+				<span>Keyboard Shortcuts</span>
+				<button class="shortcut-modal-close">&times;</button>
+			</div>
+			<div class="shortcut-modal-body"></div>
+		</div>
 	</div>
 
 	<div id="resize-overlay"></div>

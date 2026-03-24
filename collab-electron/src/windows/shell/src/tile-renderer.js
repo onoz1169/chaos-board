@@ -7,13 +7,21 @@
  * @param {((id: string) => void)|null} [callbacks.onOpenInViewer]
  * @param {((id: string, url: string) => void)|null} [callbacks.onNavigate]
  */
-const STICKY_COLORS = [
-  "#FFF3B0",
-  "#B0F0C8",
-  "#FFB3C1",
-  "#B3D9FF",
-  "#E0B3FF",
-];
+const STICKY_COLOR = "#2a2a2a";
+
+function appendConnectionHandles(container) {
+  const edges = ["top", "right", "bottom", "left"];
+  for (const edge of edges) {
+    const handle = document.createElement("div");
+    handle.className = `tile-conn-handle tile-conn-handle-${edge} conn-handle-appear`;
+    handle.dataset.edge = edge;
+    // Remove the appear animation class after it completes
+    handle.addEventListener("animationend", () => {
+      handle.classList.remove("conn-handle-appear");
+    }, { once: true });
+    container.appendChild(handle);
+  }
+}
 
 export function createTileDOM(tile, callbacks) {
   // -- Sticky note tile --
@@ -22,23 +30,10 @@ export function createTileDOM(tile, callbacks) {
     container.className = "canvas-tile";
     container.dataset.tileId = tile.id;
     container.dataset.tileType = tile.type;
-    container.style.setProperty("--sticky-color", tile.noteColor || "#FFF3B0");
+    container.style.setProperty("--sticky-color", STICKY_COLOR);
 
     const titleBar = document.createElement("div");
     titleBar.className = "tile-title-bar";
-
-    const colorPicker = document.createElement("div");
-    colorPicker.className = "sticky-color-picker";
-    for (const color of STICKY_COLORS) {
-      const btn = document.createElement("button");
-      btn.className = "sticky-color-btn";
-      btn.dataset.color = color;
-      btn.style.setProperty("--btn-color", color);
-      btn.title = color;
-      btn.addEventListener("mousedown", (e) => e.stopPropagation());
-      colorPicker.appendChild(btn);
-    }
-    titleBar.appendChild(colorPicker);
 
     const btnGroup = document.createElement("div");
     btnGroup.className = "tile-btn-group";
@@ -101,6 +96,11 @@ export function createTileDOM(tile, callbacks) {
     container.appendChild(contentArea);
     container.appendChild(contentOverlay);
 
+    appendConnectionHandles(container);
+
+    container.addEventListener("mouseenter", () => container.classList.add("tile-hovered"));
+    container.addEventListener("mouseleave", () => container.classList.remove("tile-hovered"));
+
     return {
       container,
       titleBar,
@@ -137,12 +137,27 @@ export function createTileDOM(tile, callbacks) {
   titleText.appendChild(nameSpan);
   if (tile.filePath) titleText.title = tile.filePath;
   if (tile.folderPath) titleText.title = tile.folderPath;
+  // For term tiles, add a status dot before the title text
+  if (tile.type === "term") {
+    const statusDot = document.createElement("span");
+    statusDot.className = "tile-term-status";
+    statusDot.title = "Running";
+    titleBar.appendChild(statusDot);
+  }
+
   titleBar.appendChild(titleText);
 
-  // For term tiles, allow inline rename via double-click on the title text
+  // For term tiles, add a pencil icon and allow inline rename
   if (tile.type === "term") {
-    titleText.addEventListener("dblclick", (e) => {
-      e.stopPropagation();
+    titleText.title = "Double-click to rename";
+    const renameIcon = document.createElement("span");
+    renameIcon.className = "tile-rename-icon";
+    renameIcon.innerHTML = `<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 1.5l3 3L5 14H2v-3L11.5 1.5z"/></svg>`;
+    renameIcon.title = "Rename terminal";
+    renameIcon.addEventListener("mousedown", (e) => e.stopPropagation());
+    titleText.appendChild(renameIcon);
+
+    function startRename() {
       const currentName = titleText.querySelector(".tile-title-name")?.textContent || "Terminal";
       const input = document.createElement("input");
       input.type = "text";
@@ -166,7 +181,7 @@ export function createTileDOM(tile, callbacks) {
         }
         input.remove();
         titleText.style.display = "";
-        // Refresh displayed text
+        // Refresh displayed text — re-add child spans and the rename icon
         titleText.textContent = "";
         const ps = document.createElement("span");
         ps.className = "tile-title-parent";
@@ -176,6 +191,7 @@ export function createTileDOM(tile, callbacks) {
         ns.textContent = tile.label || "Terminal";
         titleText.appendChild(ps);
         titleText.appendChild(ns);
+        titleText.appendChild(renameIcon);
         // Notify consumer to save (custom event)
         titleBar.dispatchEvent(new CustomEvent("tile-label-change", { bubbles: true, detail: { id: tile.id } }));
       }
@@ -187,12 +203,21 @@ export function createTileDOM(tile, callbacks) {
         titleText.style.display = "";
       }
 
-      input.addEventListener("mousedown", (e) => e.stopPropagation());
-      input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") { e.preventDefault(); commitEdit(); }
-        if (e.key === "Escape") { e.preventDefault(); cancelEdit(); }
+      input.addEventListener("mousedown", (ev) => ev.stopPropagation());
+      input.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") { ev.preventDefault(); commitEdit(); }
+        if (ev.key === "Escape") { ev.preventDefault(); cancelEdit(); }
       });
       input.addEventListener("blur", commitEdit);
+    }
+
+    titleText.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      startRename();
+    });
+    renameIcon.addEventListener("click", (e) => {
+      e.stopPropagation();
+      startRename();
     });
   }
 
@@ -333,6 +358,11 @@ export function createTileDOM(tile, callbacks) {
   container.appendChild(titleBar);
   container.appendChild(contentArea);
   contentArea.appendChild(contentOverlay);
+
+  appendConnectionHandles(container);
+
+  container.addEventListener("mouseenter", () => container.classList.add("tile-hovered"));
+  container.addEventListener("mouseleave", () => container.classList.remove("tile-hovered"));
 
   return { container, titleBar, titleText, contentArea, contentOverlay, closeBtn, urlInput, navBack, navForward, navReload };
 }

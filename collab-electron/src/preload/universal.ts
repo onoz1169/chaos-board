@@ -242,6 +242,8 @@ contextBridge.exposeInMainWorld("api", {
   },
   notifyPtySessionId: (sessionId: string) =>
     ipcRenderer.sendToHost("pty-session-id", sessionId),
+  notifyPtyExited: (sessionId: string, exitCode: number) =>
+    ipcRenderer.sendToHost("pty-exited", sessionId, exitCode),
   onCdTo: (cb: CdToCallback) => {
     cdToListeners.add(cb);
   },
