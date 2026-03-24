@@ -1973,3 +1973,91 @@ body {
   inset: 0;
   z-index: 1;
 }
+
+/* ── Pen overlay ── */
+
+.pen-overlay-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.pen-overlay-canvas.pen-mode-active {
+  pointer-events: auto;
+  cursor: crosshair;
+}
+
+/* Pen mode indicator */
+.pen-mode-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #aaa;
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  user-select: none;
+}
+
+.pen-mode-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.pen-mode-btn.pen-mode-on {
+  background: rgba(59, 130, 246, 0.25);
+  border-color: rgba(59, 130, 246, 0.6);
+  color: #60a5fa;
+}
+
+/* Pen toolbar (shown when pen mode is active) */
+.pen-toolbar {
+  position: fixed;
+  bottom: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: rgba(30, 30, 30, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  user-select: none;
+}
+
+.pen-toolbar.visible {
+  display: flex;
+}
+
+.pen-toolbar .draw-tool-btn,
+.pen-toolbar .draw-color-swatch,
+.pen-toolbar .draw-size-btn,
+.pen-toolbar .draw-clear-btn {
+  /* Reuse existing draw toolbar styles */
+}
+
+.pen-toolbar-separator {
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.pen-undo-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #aaa;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.pen-undo-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
