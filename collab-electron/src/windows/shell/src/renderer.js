@@ -2518,6 +2518,26 @@ async function init() {
 			}
 		}
 
+		// E = eraser, B = brush (pen mode only)
+		if (isPenMode() && (e.key === "e" || e.key === "b") && !e.metaKey && !e.ctrlKey) {
+			const focused = document.activeElement;
+			const isEditing = focused && (
+				focused.isContentEditable ||
+				focused.tagName === "INPUT" ||
+				focused.tagName === "TEXTAREA" ||
+				focused.closest("webview")
+			);
+			if (!isEditing) {
+				e.preventDefault();
+				const tool = e.key === "e" ? "eraser" : "brush";
+				setPenTool(undefined, undefined, tool);
+				for (const b of penToolbar.querySelectorAll("[data-pen-tool]")) {
+					b.classList.toggle("draw-tool-active", b.dataset.penTool === tool);
+				}
+				return;
+			}
+		}
+
 		// Cmd+Z: undo last pen stroke (when pen mode is active)
 		if (e.key === "z" && (e.metaKey || e.ctrlKey) && !e.shiftKey && isPenMode()) {
 			e.preventDefault();
@@ -3292,6 +3312,8 @@ init();
 		{ keys: "Long-press zone", desc: "Select all tiles in zone" },
 		{ keys: "Escape", desc: "Clear selection" },
 		{ keys: "P", desc: "Toggle pen mode" },
+		{ keys: "B (pen mode)", desc: "Brush tool" },
+		{ keys: "E (pen mode)", desc: "Eraser tool" },
 		{ keys: "\u2318Z (pen mode)", desc: "Undo last stroke" },
 	];
 
