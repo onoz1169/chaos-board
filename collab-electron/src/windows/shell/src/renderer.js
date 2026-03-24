@@ -28,6 +28,8 @@ import {
 } from "./connection-renderer.js";
 import { attachDrawing, restoreDrawing, clearDrawing } from "./draw-interactions.js";
 import { createDrawToolbar } from "./draw-toolbar.js";
+import { strokes as penStrokes, clearStrokes as clearPenStrokes, undoStroke, toJSON as penStrokesToJSON, fromJSON as penStrokesFromJSON } from "./pen-stroke-state.js";
+import { initPenOverlay, redraw as redrawPenOverlay, togglePenMode, isPenMode, setPenMode, setPenTool } from "./pen-overlay.js";
 
 // -- Dark mode --
 
@@ -254,9 +256,11 @@ canvasEl.addEventListener("wheel", (e) => {
 		const rect = canvasEl.getBoundingClientRect();
 		applyZoom(e.deltaY, e.clientX - rect.left, e.clientY - rect.top);
 	} else {
-		canvasX -= e.deltaX * 1.2;
-		canvasY -= e.deltaY * 1.2;
-		updateCanvas();
+		if (!isPenMode()) {
+			canvasX -= e.deltaX * 1.2;
+			canvasY -= e.deltaY * 1.2;
+			updateCanvas();
+		}
 	}
 }, { passive: false });
 
@@ -502,6 +506,11 @@ async function init() {
 	const loadingStatusEl =
 		document.getElementById("loading-status");
 
+	const penModeBtn = document.getElementById("pen-mode-btn");
+	const penToolbar = document.getElementById("pen-toolbar");
+	const penUndoBtn = document.getElementById("pen-undo-btn");
+	const penClearBtn = document.getElementById("pen-clear-btn");
+
 	const tileLayer = document.getElementById("tile-layer");
 	const groupLayer = document.getElementById("group-layer");
 	initZoneLayer();
@@ -639,6 +648,7 @@ async function init() {
 			},
 			groups: groupsToJSON(),
 			connections: connectionsToJSON(),
+			penStrokes: penStrokesToJSON(),
 		};
 	}
 
@@ -1576,9 +1586,16 @@ async function init() {
 		}
 	}
 
+	// -- Pen overlay --
+	initPenOverlay(canvasEl, {
+		onStrokeEnd: () => saveCanvasDebounced(),
+	});
+	redrawPenOverlay(canvasX, canvasY, canvasScale);
+
 	onCanvasUpdate = () => {
 		repositionAllTiles();
 		updateEdgeIndicators();
+		redrawPenOverlay(canvasX, canvasY, canvasScale);
 		saveCanvasDebounced();
 	};
 
@@ -2188,6 +2205,12 @@ async function init() {
 			connectionsFromJSON(savedState.connections);
 			renderConnections(connections, tiles, canvasX, canvasY, canvasScale);
 		}
+
+		// Restore pen strokes
+		if (savedState.penStrokes) {
+			penStrokesFromJSON(savedState.penStrokes);
+			redrawPenOverlay(canvasX, canvasY, canvasScale);
+		}
 	}
 
 	// -- Initialize workspaces --
@@ -2478,6 +2501,32 @@ async function init() {
 	// -- Selection keyboard handlers --
 
 	window.addEventListener("keydown", (e) => {
+		// P key = toggle pen mode (unless typing in input)
+		if (e.key === "p" && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+			const focused = document.activeElement;
+			const isEditing = focused && (
+				focused.isContentEditable ||
+				focused.tagName === "INPUT" ||
+				focused.tagName === "TEXTAREA" ||
+				focused.closest("webview")
+			);
+			if (!isEditing) {
+				e.preventDefault();
+				const active = togglePenMode();
+				updatePenModeUI(active);
+				return;
+			}
+		}
+
+		// Cmd+Z: undo last pen stroke (when pen mode is active)
+		if (e.key === "z" && (e.metaKey || e.ctrlKey) && !e.shiftKey && isPenMode()) {
+			e.preventDefault();
+			undoStroke();
+			redrawPenOverlay(canvasX, canvasY, canvasScale);
+			saveCanvasDebounced();
+			return;
+		}
+
 		// Cmd+G = group selected tiles
 		if (e.key === "g" && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
 			if (getSelectedTiles().length >= 2) {
@@ -3242,6 +3291,8 @@ init();
 		{ keys: "Shift + Arrow", desc: "Move tiles faster" },
 		{ keys: "Long-press zone", desc: "Select all tiles in zone" },
 		{ keys: "Escape", desc: "Clear selection" },
+		{ keys: "P", desc: "Toggle pen mode" },
+		{ keys: "\u2318Z (pen mode)", desc: "Undo last stroke" },
 	];
 
 	// Populate rows
@@ -3275,6 +3326,73 @@ init();
 		if (e.key === "Escape" && shortcutModal.classList.contains("visible")) {
 			hideShortcutModal();
 		}
+	});
+
+	// -- Pen mode --
+
+	function updatePenModeUI(active) {
+		penModeBtn.classList.toggle("pen-mode-on", active);
+		penModeBtn.textContent = active ? "Pen ON" : "Pen";
+		penToolbar.classList.toggle("visible", active);
+		if (active) {
+			canvasEl.classList.add("pen-mode");
+		} else {
+			canvasEl.classList.remove("pen-mode");
+		}
+	}
+
+	penModeBtn.addEventListener("click", () => {
+		const active = togglePenMode();
+		updatePenModeUI(active);
+	});
+
+	// Pen toolbar: tool buttons
+	for (const btn of penToolbar.querySelectorAll("[data-pen-tool]")) {
+		btn.addEventListener("mousedown", (e) => e.stopPropagation());
+		btn.addEventListener("click", () => {
+			for (const b of penToolbar.querySelectorAll("[data-pen-tool]")) {
+				b.classList.toggle("draw-tool-active", b === btn);
+			}
+			setPenTool(undefined, undefined, btn.dataset.penTool);
+		});
+	}
+
+	// Pen toolbar: color swatches
+	for (const swatch of penToolbar.querySelectorAll("[data-pen-color]")) {
+		swatch.addEventListener("mousedown", (e) => e.stopPropagation());
+		swatch.addEventListener("click", () => {
+			for (const s of penToolbar.querySelectorAll("[data-pen-color]")) {
+				s.classList.toggle("draw-color-active", s === swatch);
+			}
+			setPenTool(swatch.dataset.penColor);
+		});
+	}
+
+	// Pen toolbar: size buttons
+	for (const btn of penToolbar.querySelectorAll("[data-pen-size]")) {
+		btn.addEventListener("mousedown", (e) => e.stopPropagation());
+		btn.addEventListener("click", () => {
+			for (const b of penToolbar.querySelectorAll("[data-pen-size]")) {
+				b.classList.toggle("draw-size-active", b === btn);
+			}
+			setPenTool(undefined, parseInt(btn.dataset.penSize, 10));
+		});
+	}
+
+	// Pen toolbar: undo
+	penUndoBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+	penUndoBtn.addEventListener("click", () => {
+		undoStroke();
+		redrawPenOverlay(canvasX, canvasY, canvasScale);
+		saveCanvasDebounced();
+	});
+
+	// Pen toolbar: clear
+	penClearBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+	penClearBtn.addEventListener("click", () => {
+		clearPenStrokes();
+		redrawPenOverlay(canvasX, canvasY, canvasScale);
+		saveCanvasDebounced();
 	});
 
 	// -- Empty canvas hint --

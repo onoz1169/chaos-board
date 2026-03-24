@@ -81,7 +81,27 @@
 		</select>
 		<input type="text" id="launch-custom-cmd" placeholder="command" style="display:none" />
 		<button type="button" id="launch-all-btn" title="Send command to all terminal tiles (Cmd+Shift+L)">&#9889; Launch All</button>
+		<button type="button" id="pen-mode-btn" class="pen-mode-btn" title="Pen mode (P)">Pen</button>
 		<button type="button" id="help-shortcut-btn" title="Keyboard shortcuts">?</button>
+	</div>
+
+	<div id="pen-toolbar" class="pen-toolbar">
+		<button type="button" class="draw-tool-btn draw-tool-active" data-pen-tool="brush">Pen</button>
+		<button type="button" class="draw-tool-btn" data-pen-tool="eraser">Eraser</button>
+		<div class="pen-toolbar-separator"></div>
+		<div class="draw-color-swatch draw-color-active" data-pen-color="#ffffff" style="background:#ffffff"></div>
+		<div class="draw-color-swatch" data-pen-color="#222222" style="background:#222222"></div>
+		<div class="draw-color-swatch" data-pen-color="#ef4444" style="background:#ef4444"></div>
+		<div class="draw-color-swatch" data-pen-color="#3b82f6" style="background:#3b82f6"></div>
+		<div class="draw-color-swatch" data-pen-color="#22c55e" style="background:#22c55e"></div>
+		<div class="draw-color-swatch" data-pen-color="#eab308" style="background:#eab308"></div>
+		<div class="pen-toolbar-separator"></div>
+		<button type="button" class="draw-size-btn" data-pen-size="2">S</button>
+		<button type="button" class="draw-size-btn draw-size-active" data-pen-size="5">M</button>
+		<button type="button" class="draw-size-btn" data-pen-size="12">L</button>
+		<div class="pen-toolbar-separator"></div>
+		<button type="button" class="pen-undo-btn" id="pen-undo-btn">Undo</button>
+		<button type="button" class="draw-clear-btn" id="pen-clear-btn">Clear</button>
 	</div>
 
 	<div id="shortcut-modal" class="shortcut-modal-overlay">
