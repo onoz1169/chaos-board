@@ -506,8 +506,10 @@ async function init() {
 	const loadingStatusEl =
 		document.getElementById("loading-status");
 
-	const penModeBtn = document.getElementById("pen-mode-btn");
-	const penToolbar = document.getElementById("pen-toolbar");
+	const penDock = document.getElementById("pen-dock");
+	const penBrushBtn = document.getElementById("pen-brush-btn");
+	const penEraserBtn = document.getElementById("pen-eraser-btn");
+	const penDockExpand = document.getElementById("pen-dock-expand");
 	const penUndoBtn = document.getElementById("pen-undo-btn");
 	const penClearBtn = document.getElementById("pen-clear-btn");
 
@@ -2501,8 +2503,8 @@ async function init() {
 	// -- Selection keyboard handlers --
 
 	window.addEventListener("keydown", (e) => {
-		// P key = toggle pen mode (unless typing in input)
-		if (e.key === "p" && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+		// P key = toggle pen mode, Escape = exit pen mode
+		if ((e.key === "p" || (e.key === "Escape" && isPenMode())) && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
 			const focused = document.activeElement;
 			const isEditing = focused && (
 				focused.isContentEditable ||
@@ -2512,8 +2514,11 @@ async function init() {
 			);
 			if (!isEditing) {
 				e.preventDefault();
-				const active = togglePenMode();
-				updatePenModeUI(active);
+				if (e.key === "Escape" || isPenMode()) {
+					deactivatePen();
+				} else {
+					activatePenWithTool("brush");
+				}
 				return;
 			}
 		}
@@ -2529,11 +2534,7 @@ async function init() {
 			);
 			if (!isEditing) {
 				e.preventDefault();
-				const tool = e.key === "e" ? "eraser" : "brush";
-				setPenTool(undefined, undefined, tool);
-				for (const b of penToolbar.querySelectorAll("[data-pen-tool]")) {
-					b.classList.toggle("draw-tool-active", b.dataset.penTool === tool);
-				}
+				activatePenWithTool(e.key === "e" ? "eraser" : "brush");
 				return;
 			}
 		}
@@ -3350,58 +3351,81 @@ init();
 		}
 	});
 
-	// -- Pen mode --
+	// -- Pen mode (dock UI) --
+
+	let activePenDockTool = null; // "brush" | "eraser" | null
+
+	function activatePenWithTool(tool) {
+		if (!isPenMode()) {
+			setPenMode(true);
+		}
+		activePenDockTool = tool;
+		setPenTool(undefined, undefined, tool);
+		penBrushBtn.classList.toggle("pen-dock-active", tool === "brush");
+		penEraserBtn.classList.toggle("pen-dock-active", tool === "eraser");
+		penDock.classList.add("pen-dock-open");
+		canvasEl.classList.add("pen-mode");
+	}
+
+	function deactivatePen() {
+		setPenMode(false);
+		activePenDockTool = null;
+		penBrushBtn.classList.remove("pen-dock-active");
+		penEraserBtn.classList.remove("pen-dock-active");
+		penDock.classList.remove("pen-dock-open");
+		canvasEl.classList.remove("pen-mode");
+	}
 
 	function updatePenModeUI(active) {
-		penModeBtn.classList.toggle("pen-mode-on", active);
-		penModeBtn.textContent = active ? "Pen ON" : "Pen";
-		penToolbar.classList.toggle("visible", active);
 		if (active) {
-			canvasEl.classList.add("pen-mode");
+			activatePenWithTool(activePenDockTool || "brush");
 		} else {
-			canvasEl.classList.remove("pen-mode");
+			deactivatePen();
 		}
 	}
 
-	penModeBtn.addEventListener("click", () => {
-		const active = togglePenMode();
-		updatePenModeUI(active);
+	// Pen icon: click to activate, click again to deactivate
+	penBrushBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+	penBrushBtn.addEventListener("click", () => {
+		if (isPenMode() && activePenDockTool === "brush") {
+			deactivatePen();
+		} else {
+			activatePenWithTool("brush");
+		}
 	});
 
-	// Pen toolbar: tool buttons
-	for (const btn of penToolbar.querySelectorAll("[data-pen-tool]")) {
-		btn.addEventListener("mousedown", (e) => e.stopPropagation());
-		btn.addEventListener("click", () => {
-			for (const b of penToolbar.querySelectorAll("[data-pen-tool]")) {
-				b.classList.toggle("draw-tool-active", b === btn);
-			}
-			setPenTool(undefined, undefined, btn.dataset.penTool);
-		});
-	}
+	penEraserBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+	penEraserBtn.addEventListener("click", () => {
+		if (isPenMode() && activePenDockTool === "eraser") {
+			deactivatePen();
+		} else {
+			activatePenWithTool("eraser");
+		}
+	});
 
-	// Pen toolbar: color swatches
-	for (const swatch of penToolbar.querySelectorAll("[data-pen-color]")) {
+	// Color swatches
+	for (const swatch of penDockExpand.querySelectorAll("[data-pen-color]")) {
 		swatch.addEventListener("mousedown", (e) => e.stopPropagation());
 		swatch.addEventListener("click", () => {
-			for (const s of penToolbar.querySelectorAll("[data-pen-color]")) {
+			for (const s of penDockExpand.querySelectorAll("[data-pen-color]")) {
 				s.classList.toggle("draw-color-active", s === swatch);
 			}
 			setPenTool(swatch.dataset.penColor);
 		});
 	}
 
-	// Pen toolbar: size buttons
-	for (const btn of penToolbar.querySelectorAll("[data-pen-size]")) {
+	// Size buttons
+	for (const btn of penDockExpand.querySelectorAll("[data-pen-size]")) {
 		btn.addEventListener("mousedown", (e) => e.stopPropagation());
 		btn.addEventListener("click", () => {
-			for (const b of penToolbar.querySelectorAll("[data-pen-size]")) {
+			for (const b of penDockExpand.querySelectorAll("[data-pen-size]")) {
 				b.classList.toggle("draw-size-active", b === btn);
 			}
 			setPenTool(undefined, parseInt(btn.dataset.penSize, 10));
 		});
 	}
 
-	// Pen toolbar: undo
+	// Undo
 	penUndoBtn.addEventListener("mousedown", (e) => e.stopPropagation());
 	penUndoBtn.addEventListener("click", () => {
 		undoStroke();
@@ -3409,7 +3433,7 @@ init();
 		saveCanvasDebounced();
 	});
 
-	// Pen toolbar: clear
+	// Clear
 	penClearBtn.addEventListener("mousedown", (e) => e.stopPropagation());
 	penClearBtn.addEventListener("click", () => {
 		clearPenStrokes();

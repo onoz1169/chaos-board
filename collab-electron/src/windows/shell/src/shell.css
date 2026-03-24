@@ -1988,76 +1988,107 @@ body {
   cursor: crosshair;
 }
 
-/* Pen mode indicator */
-.pen-mode-btn {
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #aaa;
-  font-size: 13px;
-  padding: 4px 10px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-  user-select: none;
-}
-
-.pen-mode-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.pen-mode-btn.pen-mode-on {
-  background: rgba(59, 130, 246, 0.25);
-  border-color: rgba(59, 130, 246, 0.6);
-  color: #60a5fa;
-}
-
-/* Pen toolbar (shown when pen mode is active) */
-.pen-toolbar {
+/* Pen dock — always visible at bottom center */
+.pen-dock {
   position: fixed;
   bottom: 48px;
   left: 50%;
   transform: translateX(-50%);
-  display: none;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  background: rgba(30, 30, 30, 0.96);
+  gap: 4px;
+  padding: 5px 10px;
+  background: rgba(28, 28, 28, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  border-radius: 10px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
   z-index: 100;
   user-select: none;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: gap 0.2s;
 }
 
-.pen-toolbar.visible {
+.pen-dock-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  background: transparent;
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: #888;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.pen-dock-icon:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ccc;
+  transform: scale(1.05);
+}
+
+.pen-dock-icon.pen-dock-active {
+  background: rgba(59, 130, 246, 0.25);
+  border-color: rgba(59, 130, 246, 0.6);
+  color: #60a5fa;
+  transform: scale(1.08);
+}
+
+.pen-dock-separator {
+  width: 1px;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+/* Expandable section — hidden when pen mode is off */
+.pen-dock-expand {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  transition: all 0.2s;
+}
+
+.pen-dock.pen-dock-open .pen-dock-expand {
   display: flex;
 }
 
-.pen-toolbar .draw-tool-btn,
-.pen-toolbar .draw-color-swatch,
-.pen-toolbar .draw-size-btn,
-.pen-toolbar .draw-clear-btn {
-  /* Reuse existing draw toolbar styles */
+.pen-dock.pen-dock-open {
+  gap: 6px;
 }
 
-.pen-toolbar-separator {
-  width: 1px;
-  height: 20px;
-  background: rgba(255, 255, 255, 0.1);
-  flex-shrink: 0;
-}
-
-.pen-undo-btn {
+/* Undo / Clear icon buttons */
+.pen-dock .pen-undo-btn,
+.pen-dock .draw-clear-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #aaa;
-  font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: #888;
   cursor: pointer;
+  padding: 0;
+  transition: background 0.15s, color 0.15s;
 }
 
-.pen-undo-btn:hover {
+.pen-dock .pen-undo-btn:hover {
   background: rgba(255, 255, 255, 0.1);
   color: #fff;
+}
+
+.pen-dock .draw-clear-btn {
+  border-color: rgba(239, 68, 68, 0.25);
+  color: #888;
+}
+
+.pen-dock .draw-clear-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
 }
