@@ -506,13 +506,6 @@ async function init() {
 	const loadingStatusEl =
 		document.getElementById("loading-status");
 
-	const penDock = document.getElementById("pen-dock");
-	const penBrushBtn = document.getElementById("pen-brush-btn");
-	const penEraserBtn = document.getElementById("pen-eraser-btn");
-	const penDockExpand = document.getElementById("pen-dock-expand");
-	const penUndoBtn = document.getElementById("pen-undo-btn");
-	const penClearBtn = document.getElementById("pen-clear-btn");
-
 	const tileLayer = document.getElementById("tile-layer");
 	const groupLayer = document.getElementById("group-layer");
 	initZoneLayer();
@@ -2503,51 +2496,6 @@ async function init() {
 	// -- Selection keyboard handlers --
 
 	window.addEventListener("keydown", (e) => {
-		// P key = toggle pen mode, Escape = exit pen mode
-		if ((e.key === "p" || (e.key === "Escape" && isPenMode())) && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
-			const focused = document.activeElement;
-			const isEditing = focused && (
-				focused.isContentEditable ||
-				focused.tagName === "INPUT" ||
-				focused.tagName === "TEXTAREA" ||
-				focused.closest("webview")
-			);
-			if (!isEditing) {
-				e.preventDefault();
-				if (e.key === "Escape" || isPenMode()) {
-					deactivatePen();
-				} else {
-					activatePenWithTool("brush");
-				}
-				return;
-			}
-		}
-
-		// E = eraser, B = brush (pen mode only)
-		if (isPenMode() && (e.key === "e" || e.key === "b") && !e.metaKey && !e.ctrlKey) {
-			const focused = document.activeElement;
-			const isEditing = focused && (
-				focused.isContentEditable ||
-				focused.tagName === "INPUT" ||
-				focused.tagName === "TEXTAREA" ||
-				focused.closest("webview")
-			);
-			if (!isEditing) {
-				e.preventDefault();
-				activatePenWithTool(e.key === "e" ? "eraser" : "brush");
-				return;
-			}
-		}
-
-		// Cmd+Z: undo last pen stroke (when pen mode is active)
-		if (e.key === "z" && (e.metaKey || e.ctrlKey) && !e.shiftKey && isPenMode()) {
-			e.preventDefault();
-			undoStroke();
-			redrawPenOverlay(canvasX, canvasY, canvasScale);
-			saveCanvasDebounced();
-			return;
-		}
-
 		// Cmd+G = group selected tiles
 		if (e.key === "g" && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
 			if (getSelectedTiles().length >= 2) {
@@ -3353,6 +3301,13 @@ init();
 
 	// -- Pen mode (dock UI) --
 
+	const penDock = document.getElementById("pen-dock");
+	const penBrushBtn = document.getElementById("pen-brush-btn");
+	const penEraserBtn = document.getElementById("pen-eraser-btn");
+	const penDockExpand = document.getElementById("pen-dock-expand");
+	const penUndoBtn = document.getElementById("pen-undo-btn");
+	const penClearBtn = document.getElementById("pen-clear-btn");
+
 	let activePenDockTool = null; // "brush" | "eraser" | null
 
 	function activatePenWithTool(tool) {
@@ -3439,6 +3394,54 @@ init();
 		clearPenStrokes();
 		redrawPenOverlay(canvasX, canvasY, canvasScale);
 		saveCanvasDebounced();
+	});
+
+	// Pen mode keyboard shortcuts
+	window.addEventListener("keydown", (e) => {
+		// P key = toggle pen mode, Escape = exit pen mode
+		if ((e.key === "p" || (e.key === "Escape" && isPenMode())) && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+			const focused = document.activeElement;
+			const isEditing = focused && (
+				focused.isContentEditable ||
+				focused.tagName === "INPUT" ||
+				focused.tagName === "TEXTAREA" ||
+				focused.closest("webview")
+			);
+			if (!isEditing) {
+				e.preventDefault();
+				if (e.key === "Escape" || isPenMode()) {
+					deactivatePen();
+				} else {
+					activatePenWithTool("brush");
+				}
+				return;
+			}
+		}
+
+		// E = eraser, B = brush (pen mode only)
+		if (isPenMode() && (e.key === "e" || e.key === "b") && !e.metaKey && !e.ctrlKey) {
+			const focused = document.activeElement;
+			const isEditing = focused && (
+				focused.isContentEditable ||
+				focused.tagName === "INPUT" ||
+				focused.tagName === "TEXTAREA" ||
+				focused.closest("webview")
+			);
+			if (!isEditing) {
+				e.preventDefault();
+				activatePenWithTool(e.key === "e" ? "eraser" : "brush");
+				return;
+			}
+		}
+
+		// Cmd+Z: undo last pen stroke (when pen mode is active)
+		if (e.key === "z" && (e.metaKey || e.ctrlKey) && !e.shiftKey && isPenMode()) {
+			e.preventDefault();
+			undoStroke();
+			redrawPenOverlay(canvasX, canvasY, canvasScale);
+			saveCanvasDebounced();
+			return;
+		}
 	});
 
 	// -- Empty canvas hint --
