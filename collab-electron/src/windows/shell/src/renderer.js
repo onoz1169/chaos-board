@@ -17,15 +17,6 @@ import {
 } from "./group-state.js";
 import { initGroupLayer, renderGroups } from "./group-renderer.js";
 import { initZoneLayer, repositionZones, getTilesInZone, getZoneAtPoint, flashZone } from "./zone-renderer.js";
-import {
-	connections, addConnection, removeConnection,
-	getConnectionsForTile, clearConnections,
-	toJSON as connectionsToJSON, fromJSON as connectionsFromJSON,
-} from "./connection-state.js";
-import {
-	initConnectionLayer, renderConnections,
-	startConnectionDrag, cleanupConnectionLayer,
-} from "./connection-renderer.js";
 import { attachDrawing, restoreDrawing, clearDrawing } from "./draw-interactions.js";
 import { createDrawToolbar } from "./draw-toolbar.js";
 import { strokes as penStrokes, clearStrokes as clearPenStrokes, undoStroke, toJSON as penStrokesToJSON, fromJSON as penStrokesFromJSON } from "./pen-stroke-state.js";
@@ -559,7 +550,6 @@ async function init() {
 		}, true);
 	}
 	initGroupLayer(canvasEl);
-	initConnectionLayer(canvasEl);
 
 	// -- Group/ungroup helpers --
 
@@ -642,7 +632,6 @@ async function init() {
 				zoom: canvasScale,
 			},
 			groups: groupsToJSON(),
-			connections: connectionsToJSON(),
 			penStrokes: penStrokesToJSON(),
 		};
 	}
@@ -791,7 +780,6 @@ async function init() {
 		}
 		repositionZones(canvasX, canvasY, canvasScale);
 		renderGroups(groups, tiles, canvasX, canvasY, canvasScale);
-		renderConnections(connections, tiles, canvasX, canvasY, canvasScale);
 	}
 
 	function spawnTerminalWebview(tile, autoFocus = false) {
@@ -1240,10 +1228,6 @@ async function init() {
 
 		deselectTile(id);
 		removeTileFromGroup(id);
-		// Remove all connections involving this tile
-		for (const conn of getConnectionsForTile(id)) {
-			removeConnection(conn.id);
-		}
 		const tile = getTile(id);
 		if (tile) window.shellApi.trackEvent("tile_closed", { type: tile.type });
 		removeTile(id);
@@ -1596,45 +1580,6 @@ async function init() {
 
 	updateEdgeIndicators();
 
-	// -- Connection handle drag --
-	canvasEl.addEventListener("mousedown", (e) => {
-		const handle = e.target.closest(".tile-conn-handle");
-		if (!handle) return;
-		e.preventDefault();
-		e.stopPropagation();
-		const tileEl = handle.closest(".canvas-tile");
-		if (!tileEl) return;
-		const fromTileId = tileEl.dataset.tileId;
-		const fromEdge = handle.dataset.edge;
-		if (!fromTileId || !fromEdge) return;
-		canvasEl.classList.add("connection-dragging");
-		const rect = handle.getBoundingClientRect();
-		const startX = rect.left + rect.width / 2;
-		const startY = rect.top + rect.height / 2;
-		startConnectionDrag(fromTileId, fromEdge, startX, startY,
-			(toTileId, toEdge) => {
-				canvasEl.classList.remove("connection-dragging");
-				addConnection({ fromTileId, fromEdge, toTileId, toEdge });
-				renderConnections(connections, tiles, canvasX, canvasY, canvasScale);
-				saveCanvasImmediate();
-			},
-			() => { canvasEl.classList.remove("connection-dragging"); },
-		);
-	}, true);
-
-	// -- Right-click to delete connection --
-	canvasEl.addEventListener("contextmenu", (e) => {
-		const path = e.target.closest(".connection-path");
-		if (!path) return;
-		e.preventDefault();
-		e.stopPropagation();
-		const connId = path.dataset.connectionId;
-		if (connId) {
-			removeConnection(connId);
-			renderConnections(connections, tiles, canvasX, canvasY, canvasScale);
-			saveCanvasImmediate();
-		}
-	});
 
 	// -- Double-click to create terminal tile --
 
@@ -2195,11 +2140,6 @@ async function init() {
 			renderGroups(groups, tiles, canvasX, canvasY, canvasScale);
 		}
 
-		// Restore persistent connections
-		if (savedState.connections) {
-			connectionsFromJSON(savedState.connections);
-			renderConnections(connections, tiles, canvasX, canvasY, canvasScale);
-		}
 
 		// Restore pen strokes
 		if (savedState.penStrokes) {

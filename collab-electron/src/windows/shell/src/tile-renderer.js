@@ -9,20 +9,6 @@
  */
 const STICKY_COLOR = "#2a2a2a";
 
-function appendConnectionHandles(container) {
-  const edges = ["top", "right", "bottom", "left"];
-  for (const edge of edges) {
-    const handle = document.createElement("div");
-    handle.className = `tile-conn-handle tile-conn-handle-${edge} conn-handle-appear`;
-    handle.dataset.edge = edge;
-    // Remove the appear animation class after it completes
-    handle.addEventListener("animationend", () => {
-      handle.classList.remove("conn-handle-appear");
-    }, { once: true });
-    container.appendChild(handle);
-  }
-}
-
 export function createTileDOM(tile, callbacks) {
   // -- Sticky note tile --
   if (tile.type === "text") {
@@ -96,7 +82,6 @@ export function createTileDOM(tile, callbacks) {
     container.appendChild(contentArea);
     container.appendChild(contentOverlay);
 
-    appendConnectionHandles(container);
 
     container.addEventListener("mouseenter", () => container.classList.add("tile-hovered"));
     container.addEventListener("mouseleave", () => container.classList.remove("tile-hovered"));
@@ -172,7 +157,6 @@ export function createTileDOM(tile, callbacks) {
     container.appendChild(titleBar);
     container.appendChild(contentArea);
 
-    appendConnectionHandles(container);
 
     return {
       container,
@@ -428,8 +412,6 @@ export function createTileDOM(tile, callbacks) {
   container.appendChild(titleBar);
   container.appendChild(contentArea);
   contentArea.appendChild(contentOverlay);
-
-  appendConnectionHandles(container);
 
   container.addEventListener("mouseenter", () => container.classList.add("tile-hovered"));
   container.addEventListener("mouseleave", () => container.classList.remove("tile-hovered"));
