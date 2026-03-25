@@ -1202,97 +1202,6 @@ body {
 	color: rgba(128, 128, 128, 0.5);
 }
 
-/* ── Launch All toolbar ── */
-
-#launch-toolbar {
-	position: fixed;
-	bottom: 32px;
-	right: 16px;
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	background: color-mix(in srgb, var(--bg) 70%, transparent);
-	backdrop-filter: blur(12px);
-	-webkit-backdrop-filter: blur(12px);
-	border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-	border-radius: 9999px;
-	padding: 6px 14px;
-	z-index: 200;
-	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.06);
-	font-family: var(--font-mono);
-	font-size: 11px;
-}
-
-#launch-tool-select {
-	font-family: var(--font-mono);
-	font-size: 11px;
-	background: transparent;
-	color: var(--fg);
-	border: 1px solid var(--border);
-	border-radius: 4px;
-	padding: 2px 4px;
-	cursor: pointer;
-	outline: none;
-}
-
-#launch-custom-cmd {
-	font-family: var(--font-mono);
-	font-size: 11px;
-	background: transparent;
-	color: var(--fg);
-	border: 1px solid var(--border);
-	border-radius: 4px;
-	padding: 2px 6px;
-	width: 120px;
-	outline: none;
-}
-
-#launch-all-btn {
-	font-family: var(--font-mono);
-	font-size: 11px;
-	font-weight: 600;
-	background: var(--edge-dot);
-	color: #fff;
-	border: none;
-	border-radius: 9999px;
-	padding: 4px 12px;
-	cursor: pointer;
-	white-space: nowrap;
-}
-
-#launch-all-btn:hover {
-	filter: brightness(1.1);
-}
-
-#launch-all-btn:active {
-	transform: scale(0.97);
-}
-
-#launch-all-btn.disabled {
-	background: var(--muted);
-	opacity: 0.5;
-	cursor: not-allowed;
-	filter: none;
-}
-
-#launch-all-btn.disabled:hover {
-	filter: none;
-}
-
-#launch-all-btn.disabled:active {
-	transform: none;
-}
-
-@keyframes launchPulse {
-	0% { box-shadow: 0 0 0 0 rgba(34, 160, 90, 0.5); }
-	70% { box-shadow: 0 0 0 8px rgba(34, 160, 90, 0); }
-	100% { box-shadow: 0 0 0 0 rgba(34, 160, 90, 0); }
-}
-
-#launch-all-btn.launch-pulse {
-	animation: launchPulse 0.6s ease-out;
-}
-
 /* ── Sticky note tile (light theme base) ── */
 .canvas-tile[data-tile-type="text"] {
 	background: #fefce8;
@@ -1599,31 +1508,6 @@ body {
 	opacity: 1;
 }
 
-/* ── Keyboard shortcut help button ── */
-
-#help-shortcut-btn {
-	font-family: var(--font-mono);
-	font-size: 12px;
-	font-weight: 600;
-	width: 24px;
-	height: 24px;
-	border-radius: 50%;
-	border: 1px solid var(--border);
-	background: transparent;
-	color: var(--muted);
-	cursor: pointer;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	padding: 0;
-	transition: color 0.15s, border-color 0.15s;
-}
-
-#help-shortcut-btn:hover {
-	color: var(--fg);
-	border-color: var(--fg);
-}
-
 /* ── Shortcut modal ── */
 
 .shortcut-modal-overlay {
@@ -1842,7 +1726,7 @@ body {
 /* Pen dock — always visible at bottom center */
 .pen-dock {
   position: fixed;
-  bottom: 48px;
+  bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -1942,6 +1826,83 @@ body {
 .pen-dock .draw-clear-btn:hover {
   background: rgba(239, 68, 68, 0.15);
   color: #ef4444;
+}
+
+/* ── Dock inline controls ── */
+
+.dock-select {
+	font-family: var(--font-mono);
+	font-size: 10px;
+	background: transparent;
+	color: #999;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 6px;
+	padding: 4px 6px;
+	cursor: pointer;
+	outline: none;
+	max-width: 72px;
+	-webkit-appearance: none;
+	appearance: none;
+}
+
+.dock-select option {
+	background: #1c1c1c;
+	color: #ccc;
+}
+
+.dock-input {
+	font-family: var(--font-mono);
+	font-size: 10px;
+	background: transparent;
+	color: #ccc;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 6px;
+	padding: 4px 6px;
+	width: 70px;
+	outline: none;
+}
+
+.dock-input:focus {
+	border-color: rgba(59, 130, 246, 0.5);
+}
+
+.dock-launch-icon {
+	color: #22c55e !important;
+	border-color: rgba(34, 197, 94, 0.25) !important;
+}
+
+.dock-launch-icon:hover {
+	background: rgba(34, 197, 94, 0.15) !important;
+	color: #4ade80 !important;
+}
+
+.dock-launch-icon.disabled {
+	opacity: 0.3;
+	cursor: not-allowed;
+}
+
+.dock-launch-icon.disabled:hover {
+	background: transparent !important;
+	transform: none;
+}
+
+.dock-help-icon {
+	color: #666 !important;
+	border-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+.dock-help-icon:hover {
+	color: #ccc !important;
+}
+
+@keyframes launchPulse {
+	0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); }
+	70% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+	100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+
+.dock-launch-icon.launch-pulse {
+	animation: launchPulse 1s ease-out;
 }
 
 /* ── Focus-visible keyboard accessibility ── */

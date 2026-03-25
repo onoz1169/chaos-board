@@ -1198,6 +1198,13 @@ async function init() {
 		return tile;
 	}
 
+	function getViewportCenter() {
+		const rect = canvasEl.getBoundingClientRect();
+		const cx = (rect.width / 2 - canvasX) / canvasScale;
+		const cy = (rect.height / 2 - canvasY) / canvasScale;
+		return { cx, cy };
+	}
+
 	function createTextTile(cx, cy, content = "", noteColor = "#FFF3B0", fontSize = 14) {
 		const tile = createCanvasTile("text", cx, cy, { content, noteColor, fontSize });
 		const dom = tileDOMs.get(tile.id);
@@ -3312,6 +3319,11 @@ init();
 		{ keys: "Shift + Arrow", desc: "Move tiles faster" },
 		{ keys: "Long-press zone", desc: "Select all tiles in zone" },
 		{ keys: "Escape", desc: "Clear selection" },
+		{ keys: "V", desc: "Pointer (select/move)" },
+		{ keys: "T", desc: "New terminal" },
+		{ keys: "N", desc: "New sticky note" },
+		{ keys: "W", desc: "New browser" },
+		{ keys: "D", desc: "New draw canvas" },
 		{ keys: "P", desc: "Toggle pen mode" },
 		{ keys: "B (pen mode)", desc: "Brush tool" },
 		{ keys: "E (pen mode)", desc: "Eraser tool" },
@@ -3395,23 +3407,7 @@ init();
 	}
 
 	// Pen icon: click to activate, click again to deactivate
-	penBrushBtn.addEventListener("mousedown", (e) => e.stopPropagation());
-	penBrushBtn.addEventListener("click", () => {
-		if (isPenMode() && activePenDockTool === "brush") {
-			deactivatePen();
-		} else {
-			activatePenWithTool("brush");
-		}
-	});
-
-	penEraserBtn.addEventListener("mousedown", (e) => e.stopPropagation());
-	penEraserBtn.addEventListener("click", () => {
-		if (isPenMode() && activePenDockTool === "eraser") {
-			deactivatePen();
-		} else {
-			activatePenWithTool("eraser");
-		}
-	});
+	// (wired up below via unified dock tool management)
 
 	// Color swatches
 	for (const swatch of penDockExpand.querySelectorAll("[data-pen-color]")) {
@@ -3451,8 +3447,115 @@ init();
 		saveCanvasDebounced();
 	});
 
+	// ── Unified Dock Tool Management ──
+	const toolBtns = {
+		pointer:  document.getElementById("tool-pointer-btn"),
+		terminal: document.getElementById("tool-terminal-btn"),
+		sticky:   document.getElementById("tool-sticky-btn"),
+		browser:  document.getElementById("tool-browser-btn"),
+		draw:     document.getElementById("tool-draw-btn"),
+	};
+
+	let activeDockTool = "pointer";
+
+	function setActiveTool(tool) {
+		activeDockTool = tool;
+
+		// Update active class on all tool buttons
+		for (const [key, btn] of Object.entries(toolBtns)) {
+			if (btn) btn.classList.toggle("pen-dock-active", key === tool);
+		}
+		// Also update pen/eraser buttons
+		penBrushBtn.classList.toggle("pen-dock-active", tool === "brush");
+		penEraserBtn.classList.toggle("pen-dock-active", tool === "eraser");
+
+		// Deactivate pen mode if switching away from brush/eraser
+		if (tool !== "brush" && tool !== "eraser") {
+			if (canvasEl.classList.contains("pen-mode")) {
+				setPenMode(false);
+				penDock.classList.remove("pen-dock-open");
+				canvasEl.classList.remove("pen-mode");
+			}
+		}
+
+		// Handle pen/eraser activation
+		if (tool === "brush" || tool === "eraser") {
+			setPenMode(true);
+			setPenTool(undefined, undefined, tool);
+			penDock.classList.add("pen-dock-open");
+			canvasEl.classList.add("pen-mode");
+			return;
+		}
+
+		// For creation tools, create tile at viewport center then revert to pointer
+		if (tool === "terminal" || tool === "sticky" || tool === "browser" || tool === "draw") {
+			const { cx, cy } = getViewportCenter();
+			if (tool === "terminal") {
+				const ws = workspaces[activeIndex];
+				const cwd = ws ? ws.path : undefined;
+				const tile = createCanvasTile("term", cx, cy, { cwd });
+				spawnTerminalWebview(tile, true);
+				saveCanvasImmediate();
+			} else if (tool === "sticky") {
+				createTextTile(cx, cy);
+			} else if (tool === "browser") {
+				const tile = createCanvasTile("browser", cx, cy);
+				spawnBrowserWebview(tile, true);
+				saveCanvasImmediate();
+			} else if (tool === "draw") {
+				createDrawTile(cx, cy);
+			}
+			// Revert to pointer after creation
+			setTimeout(() => setActiveTool("pointer"), 200);
+		}
+	}
+
+	// Wire up tool button clicks
+	for (const [key, btn] of Object.entries(toolBtns)) {
+		if (!btn) continue;
+		btn.addEventListener("mousedown", (e) => e.stopPropagation());
+		btn.addEventListener("click", () => setActiveTool(key));
+	}
+
+	// Override pen/eraser button behavior to use unified system
+	penBrushBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+	penBrushBtn.addEventListener("click", () => {
+		if (activeDockTool === "brush") {
+			setActiveTool("pointer");
+		} else {
+			setActiveTool("brush");
+		}
+	});
+	penEraserBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+	penEraserBtn.addEventListener("click", () => {
+		if (activeDockTool === "eraser") {
+			setActiveTool("pointer");
+		} else {
+			setActiveTool("eraser");
+		}
+	});
+
 	// Pen mode keyboard shortcuts
 	window.addEventListener("keydown", (e) => {
+		// Tool shortcuts (only when not typing in input/contenteditable)
+		if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+			const focused = document.activeElement;
+			const isEditing = focused && (
+				focused.isContentEditable ||
+				focused.tagName === "INPUT" ||
+				focused.tagName === "TEXTAREA" ||
+				focused.closest?.("webview")
+			);
+			if (!isEditing) {
+				const TOOL_KEYS = { v: "pointer", t: "terminal", n: "sticky", w: "browser", d: "draw" };
+				if (TOOL_KEYS[e.key]) {
+					e.preventDefault();
+					setActiveTool(TOOL_KEYS[e.key]);
+					return;
+				}
+			}
+		}
+
 		// P key = toggle pen mode, Escape = exit pen mode
 		if ((e.key === "p" || (e.key === "Escape" && isPenMode())) && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
 			const focused = document.activeElement;

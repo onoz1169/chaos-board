@@ -72,26 +72,44 @@
 
 	<div id="canvas-empty-hint">Right-click to add tiles &nbsp;|&nbsp; Double-click for terminal &nbsp;|&nbsp; ? for shortcuts</div>
 
-	<div id="launch-toolbar">
-		<select id="launch-tool-select">
+	<div id="pen-dock" class="pen-dock">
+		<button type="button" class="pen-dock-icon pen-dock-active" id="tool-pointer-btn" data-tool="pointer" title="Pointer (V)">
+			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 14-5 0-3 5-2-7z"/></svg>
+		</button>
+		<button type="button" class="pen-dock-icon" id="tool-terminal-btn" data-tool="terminal" title="Terminal (T)">
+			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><polyline points="7 9 10 12 7 15"/><line x1="13" y1="15" x2="17" y2="15"/></svg>
+		</button>
+		<button type="button" class="pen-dock-icon" id="tool-sticky-btn" data-tool="sticky" title="Sticky Note (N)">
+			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V8.5L15.5 3z"/><polyline points="14 3 14 9 21 9"/></svg>
+		</button>
+		<button type="button" class="pen-dock-icon" id="tool-browser-btn" data-tool="browser" title="Browser (W)">
+			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15 15 0 014 10 15 15 0 01-4 10 15 15 0 01-4-10 15 15 0 014-10z"/></svg>
+		</button>
+		<button type="button" class="pen-dock-icon" id="tool-draw-btn" data-tool="draw" title="Draw Canvas (D)">
+			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 16c1.5-3 3-6 4-6s2.5 6 4 6"/></svg>
+		</button>
+		<div class="pen-dock-separator"></div>
+		<button type="button" class="pen-dock-icon" id="pen-brush-btn" data-tool="brush" title="Pen (P, B)">
+			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+		</button>
+		<button type="button" class="pen-dock-icon" id="pen-eraser-btn" data-tool="eraser" title="Eraser (E)">
+			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20H7L3 16c-.8-.8-.8-2 0-2.8L14.6 1.6c.8-.8 2-.8 2.8 0l5 5c.8.8.8 2 0 2.8L12 20"/><path d="M6 12l5 5"/></svg>
+		</button>
+		<div class="pen-dock-separator"></div>
+		<select id="launch-tool-select" class="dock-select">
 			<option value="claude">Claude Code (YOLO)</option>
 			<option value="codex">Codex</option>
 			<option value="custom">custom...</option>
 		</select>
-		<input type="text" id="launch-custom-cmd" placeholder="command" style="display:none" />
-		<button type="button" id="launch-all-btn" title="Send command to all terminal tiles (Cmd+Shift+L)">&#9889; Launch All</button>
-		<button type="button" id="help-shortcut-btn" title="Keyboard shortcuts">?</button>
-	</div>
-
-	<div id="pen-dock" class="pen-dock">
-		<button type="button" class="pen-dock-icon" id="pen-brush-btn" data-pen-tool="brush" title="Pen (P, B)">
-			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+		<input type="text" id="launch-custom-cmd" class="dock-input" placeholder="command" style="display:none" />
+		<button type="button" class="pen-dock-icon dock-launch-icon" id="launch-all-btn" title="Launch All (Cmd+Shift+L)">
+			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
 		</button>
-		<button type="button" class="pen-dock-icon" id="pen-eraser-btn" data-pen-tool="eraser" title="Eraser (E)">
-			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20H7L3 16c-.8-.8-.8-2 0-2.8L14.6 1.6c.8-.8 2-.8 2.8 0l5 5c.8.8.8 2 0 2.8L12 20"/><path d="M6 12l5 5"/></svg>
+		<button type="button" class="pen-dock-icon dock-help-icon" id="help-shortcut-btn" title="Shortcuts (?)">
+			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 9a3 3 0 015.12 1c0 2-3.12 2.5-3.12 4"/><circle cx="12" cy="17" r="0.5" fill="currentColor"/></svg>
 		</button>
-		<div class="pen-dock-separator"></div>
 		<div class="pen-dock-expand" id="pen-dock-expand">
+			<div class="pen-dock-separator"></div>
 			<div class="draw-color-swatch draw-color-active" data-pen-color="#ffffff" style="background:#ffffff" title="White"></div>
 			<div class="draw-color-swatch" data-pen-color="#222222" style="background:#222222" title="Black"></div>
 			<div class="draw-color-swatch" data-pen-color="#ef4444" style="background:#ef4444" title="Red"></div>
