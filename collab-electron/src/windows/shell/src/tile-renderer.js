@@ -16,6 +16,7 @@ export function createTileDOM(tile, callbacks) {
     container.className = "canvas-tile";
     container.dataset.tileId = tile.id;
     container.dataset.tileType = tile.type;
+    container.setAttribute("role", "region");
     container.style.setProperty("--sticky-color", STICKY_COLOR);
 
     const titleBar = document.createElement("div");
@@ -28,6 +29,7 @@ export function createTileDOM(tile, callbacks) {
     fontDownBtn.className = "tile-action-btn sticky-font-down";
     fontDownBtn.textContent = "A−";
     fontDownBtn.title = "Decrease font size";
+    fontDownBtn.setAttribute("aria-label", "Decrease font size");
     fontDownBtn.addEventListener("mousedown", (e) => e.stopPropagation());
     btnGroup.appendChild(fontDownBtn);
 
@@ -35,6 +37,7 @@ export function createTileDOM(tile, callbacks) {
     fontUpBtn.className = "tile-action-btn sticky-font-up";
     fontUpBtn.textContent = "A+";
     fontUpBtn.title = "Increase font size";
+    fontUpBtn.setAttribute("aria-label", "Increase font size");
     fontUpBtn.addEventListener("mousedown", (e) => e.stopPropagation());
     btnGroup.appendChild(fontUpBtn);
 
@@ -42,6 +45,7 @@ export function createTileDOM(tile, callbacks) {
     closeBtn.className = "tile-action-btn tile-close-btn";
     closeBtn.innerHTML = "&times;";
     closeBtn.title = "Close tile";
+    closeBtn.setAttribute("aria-label", "Close tile");
     closeBtn.addEventListener("mousedown", (e) => e.stopPropagation());
     closeBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -57,6 +61,9 @@ export function createTileDOM(tile, callbacks) {
     textEl.className = "sticky-text";
     textEl.contentEditable = "true";
     textEl.setAttribute("placeholder", "メモ...");
+    textEl.dataset.placeholder = "Type here...";
+    textEl.addEventListener("focus", () => textEl.classList.add("editing"));
+    textEl.addEventListener("blur", () => textEl.classList.remove("editing"));
     // Prevent mousedown/click from bubbling to the tile drag handlers so that
     // clicking the text area always activates the caret without needing a
     // "focus first, then click" two-step interaction.
@@ -106,6 +113,7 @@ export function createTileDOM(tile, callbacks) {
     container.className = "canvas-tile draw-tile";
     container.dataset.tileId = tile.id;
     container.dataset.tileType = tile.type;
+    container.setAttribute("role", "region");
 
     const titleBar = document.createElement("div");
     titleBar.className = "tile-title-bar";
@@ -121,6 +129,7 @@ export function createTileDOM(tile, callbacks) {
     closeBtn.className = "tile-action-btn tile-close-btn";
     closeBtn.innerHTML = "&times;";
     closeBtn.title = "Close tile";
+    closeBtn.setAttribute("aria-label", "Close tile");
     closeBtn.addEventListener("mousedown", (e) => e.stopPropagation());
     closeBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -174,6 +183,7 @@ export function createTileDOM(tile, callbacks) {
   container.className = "canvas-tile";
   container.dataset.tileId = tile.id;
   container.dataset.tileType = tile.type;
+  container.setAttribute("role", "region");
 
   const titleBar = document.createElement("div");
   titleBar.className = "tile-title-bar";
@@ -287,6 +297,7 @@ export function createTileDOM(tile, callbacks) {
     navBack = document.createElement("button");
     navBack.className = "tile-nav-btn";
     navBack.title = "Back";
+    navBack.setAttribute("aria-label", "Back");
     navBack.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg>`;
     navBack.disabled = true;
     navBack.addEventListener("mousedown", (e) => e.stopPropagation());
@@ -294,6 +305,7 @@ export function createTileDOM(tile, callbacks) {
     navForward = document.createElement("button");
     navForward.className = "tile-nav-btn";
     navForward.title = "Forward";
+    navForward.setAttribute("aria-label", "Forward");
     navForward.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg>`;
     navForward.disabled = true;
     navForward.addEventListener("mousedown", (e) => e.stopPropagation());
@@ -301,6 +313,7 @@ export function createTileDOM(tile, callbacks) {
     navReload = document.createElement("button");
     navReload.className = "tile-nav-btn";
     navReload.title = "Reload";
+    navReload.setAttribute("aria-label", "Reload");
     navReload.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3v4h-4"/><path d="M12.36 10a5 5 0 1 1-.96-5.36L13 7"/></svg>`;
     navReload.addEventListener("mousedown", (e) => e.stopPropagation());
 
@@ -364,6 +377,7 @@ export function createTileDOM(tile, callbacks) {
     copyBtn.className = "tile-action-btn tile-copy-path-btn";
     copyBtn.innerHTML = copySvg;
     copyBtn.title = "Copy path";
+    copyBtn.setAttribute("aria-label", "Copy path");
     copyBtn.addEventListener("mousedown", (e) => e.stopPropagation());
     copyBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -379,6 +393,7 @@ export function createTileDOM(tile, callbacks) {
     viewBtn.className = "tile-action-btn tile-view-btn";
     viewBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8s3-5.5 7-5.5S15 8 15 8s-3 5.5-7 5.5S1 8 1 8z"/><circle cx="8" cy="8" r="2.5"/></svg>`;
     viewBtn.title = "Open in viewer";
+    viewBtn.setAttribute("aria-label", "Open in viewer");
     viewBtn.addEventListener("mousedown", (e) => e.stopPropagation());
     viewBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -391,6 +406,7 @@ export function createTileDOM(tile, callbacks) {
   closeBtn.className = "tile-action-btn tile-close-btn";
   closeBtn.innerHTML = "&times;";
   closeBtn.title = "Close tile";
+  closeBtn.setAttribute("aria-label", "Close tile");
   closeBtn.addEventListener("mousedown", (e) => {
     e.stopPropagation();
   });

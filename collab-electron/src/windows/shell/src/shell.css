@@ -30,7 +30,7 @@
 	--fg: rgb(220, 220, 220);
 	--border: rgba(255, 255, 255, 0.2);
 	--tile-border: rgba(255, 255, 255, 0.35);
-	--muted: rgb(132, 132, 132);
+	--muted: rgb(163, 163, 163);
 	--edge-dot: rgb(72, 210, 130);
 	--edge-dot-hover: rgb(90, 235, 150);
 }
@@ -320,7 +320,7 @@ body {
 }
 
 .dropdown-item:hover {
-	font-weight: 600;
+	background: var(--hover-bg, rgba(255,255,255,0.08));
 }
 
 .dropdown-item.active {
@@ -795,7 +795,7 @@ body {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	opacity: 0.7;
+	opacity: 0.85;
 	display: flex;
 	min-width: 0;
 }
@@ -830,7 +830,7 @@ body {
 	all: unset;
 	line-height: 1;
 	color: var(--fg);
-	opacity: 0.4;
+	opacity: 0.55;
 	cursor: pointer;
 	padding: 0 2px;
 	border-radius: 4px;
@@ -840,7 +840,7 @@ body {
 }
 
 .tile-action-btn:hover {
-	opacity: 0.8;
+	opacity: 1.0;
 }
 
 .tile-close-btn {
@@ -880,7 +880,7 @@ body {
 
 .dark .canvas-tile[data-tile-type="term"] .tile-title-bar {
 	background: rgb(8, 8, 8);
-	color: rgba(255, 255, 255, 0.7);
+	color: rgba(255, 255, 255, 0.9);
 }
 
 .canvas-tile[data-tile-type="note"] .tile-title-bar,
@@ -1080,6 +1080,8 @@ body {
 
 .canvas-tile.tile-dragging {
 	opacity: 0.85;
+	box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+	transform: scale(1.01);
 }
 
 /* ── Terminal label inline editing ── */
@@ -1130,7 +1132,7 @@ body {
 .selection-marquee {
 	position: absolute;
 	border: 1.5px solid #4a9eff;
-	background: rgba(74, 158, 255, 0.1);
+	background: rgba(74, 158, 255, 0.18);
 	border-radius: 4px;
 	pointer-events: none;
 	z-index: 999999;
@@ -1359,7 +1361,6 @@ body {
 	word-break: break-word;
 	white-space: pre-wrap;
 	box-sizing: border-box;
-	color: #333;
 }
 
 .sticky-text:empty::before {
@@ -1941,4 +1942,34 @@ body {
 .pen-dock .draw-clear-btn:hover {
   background: rgba(239, 68, 68, 0.15);
   color: #ef4444;
+}
+
+/* ── Focus-visible keyboard accessibility ── */
+
+.tile-action-btn:focus-visible,
+.dropdown-item:focus-visible,
+.ctx-menu-item:focus-visible,
+.tile-nav-btn:focus-visible {
+	outline: 2px solid rgba(74, 158, 255, 0.8);
+	outline-offset: 1px;
+}
+
+/* ── Sticky note light theme support ── */
+
+:not(.dark) .canvas-tile[data-tile-type="text"] {
+	background: #fefce8;
+	border-color: #e2e0b0;
+}
+
+:not(.dark) .canvas-tile[data-tile-type="text"] .sticky-text {
+	color: #1a1a1a !important;
+	-webkit-text-fill-color: #1a1a1a !important;
+}
+
+:not(.dark) .canvas-tile[data-tile-type="text"] .tile-action-btn {
+	color: rgba(0, 0, 0, 0.5);
+}
+
+:not(.dark) .canvas-tile[data-tile-type="text"] .tile-action-btn:hover {
+	color: rgba(0, 0, 0, 0.8);
 }

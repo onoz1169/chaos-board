@@ -67,6 +67,28 @@ export function attachDrag(titleBar, tile, {
 
     let moved = false;
 
+    // Build drag items for Escape restoration
+    const dragItems = isGroupDrag
+      ? groupCtx.map((entry) => ({
+          tile: entry.tile,
+          el: entry.container,
+          origX: entry.startX,
+          origY: entry.startY,
+        }))
+      : [{ tile, el: titleBar.closest(".canvas-tile"), origX: startTX, origY: startTY }];
+
+    function cleanup() {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.removeEventListener("keydown", onEscCancel);
+      enablePointerEvents(webviews);
+      if (isGroupDrag) {
+        for (const entry of groupCtx) {
+          entry.container.classList.remove("tile-dragging");
+        }
+      }
+    }
+
     function onMove(e) {
       const dx = (e.clientX - startMX) / viewport.zoom;
       const dy = (e.clientY - startMY) / viewport.zoom;
@@ -85,17 +107,25 @@ export function attachDrag(titleBar, tile, {
       onUpdate();
     }
 
-    function onUp(e) {
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-      enablePointerEvents(webviews);
-
-      if (shiftHeld && !moved) {
-        if (isGroupDrag) {
-          for (const entry of groupCtx) {
-            entry.container.classList.remove("tile-dragging");
+    const onEscCancel = (e) => {
+      if (e.key === "Escape") {
+        for (const item of dragItems) {
+          item.tile.x = item.origX;
+          item.tile.y = item.origY;
+          if (item.el) {
+            item.el.style.left = item.origX + "px";
+            item.el.style.top = item.origY + "px";
           }
         }
+        cleanup();
+        onUpdate();
+      }
+    };
+
+    function onUp(e) {
+      cleanup();
+
+      if (shiftHeld && !moved) {
         onShiftClick(tile.id);
         return;
       }
@@ -106,7 +136,6 @@ export function attachDrag(titleBar, tile, {
 
       if (isGroupDrag) {
         for (const entry of groupCtx) {
-          entry.container.classList.remove("tile-dragging");
           snapToGrid(entry.tile);
         }
       } else {
@@ -117,6 +146,7 @@ export function attachDrag(titleBar, tile, {
 
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
+    document.addEventListener("keydown", onEscCancel);
   }
 
   titleBar.addEventListener("mousedown", (e) => startDrag(e));
@@ -327,21 +357,32 @@ export function attachResize(
         const dx = (e.clientX - startMX) / viewport.zoom;
         const dy = (e.clientY - startMY) / viewport.zoom;
 
+        let newW = startW;
+        let newH = startH;
+
         if (dir.includes("e")) {
-          tile.width = Math.max(min.width, startW + dx);
+          newW = Math.max(min.width, startW + dx);
+          tile.width = newW;
         }
         if (dir.includes("w")) {
-          const newW = Math.max(min.width, startW - dx);
+          newW = Math.max(min.width, startW - dx);
           tile.x = startX + (startW - newW);
           tile.width = newW;
         }
         if (dir.includes("s")) {
-          tile.height = Math.max(min.height, startH + dy);
+          newH = Math.max(min.height, startH + dy);
+          tile.height = newH;
         }
         if (dir.includes("n")) {
-          const newH = Math.max(min.height, startH - dy);
+          newH = Math.max(min.height, startH - dy);
           tile.y = startY + (startH - newH);
           tile.height = newH;
+        }
+
+        if (newW <= min.width || newH <= min.height) {
+          container.classList.add("at-min-size");
+          clearTimeout(container._minSizeTimer);
+          container._minSizeTimer = setTimeout(() => container.classList.remove("at-min-size"), 600);
         }
 
         onUpdate();

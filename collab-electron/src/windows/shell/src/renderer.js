@@ -638,8 +638,16 @@ async function init() {
 
 	function saveCanvasDebounced() {
 		clearTimeout(saveTimer);
-		saveTimer = setTimeout(() => {
-			window.shellApi.canvasSaveState(getCanvasStateForSave());
+		saveTimer = setTimeout(async () => {
+			try {
+				await window.shellApi.canvasSaveState(getCanvasStateForSave());
+			} catch (err) {
+				console.error("Canvas save failed:", err);
+				// Retry once after 3 seconds
+				setTimeout(() => {
+					window.shellApi.canvasSaveState(getCanvasStateForSave()).catch(console.error);
+				}, 3000);
+			}
 		}, 500);
 	}
 
@@ -1163,6 +1171,30 @@ async function init() {
 			saveCanvasDebounced();
 		});
 
+		// Tile-specific right-click context menu
+		dom.container.addEventListener("contextmenu", async (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+
+			const menuItems = [
+				{ id: "duplicate", label: "Duplicate" },
+				{ id: "bring-to-front", label: "Bring to Front" },
+				{ separator: true },
+				{ id: "delete", label: "Delete" },
+			];
+			const selected = await showCanvasContextMenu(e.clientX, e.clientY, menuItems);
+
+			if (selected === "duplicate") {
+				duplicateTile(tile);
+			} else if (selected === "bring-to-front") {
+				bringToFront(tile);
+				positionTile(dom.container, tile, canvasX, canvasY, canvasScale);
+				saveCanvasDebounced();
+			} else if (selected === "delete") {
+				closeCanvasTile(tile.id);
+			}
+		});
+
 		return tile;
 	}
 
@@ -1232,6 +1264,38 @@ async function init() {
 		if (tile) window.shellApi.trackEvent("tile_closed", { type: tile.type });
 		removeTile(id);
 		saveCanvasImmediate();
+	}
+
+	function duplicateTile(src) {
+		const extra = { width: src.width, height: src.height };
+		if (src.filePath !== undefined) extra.filePath = src.filePath;
+		if (src.folderPath !== undefined) extra.folderPath = src.folderPath;
+		if (src.workspacePath !== undefined) extra.workspacePath = src.workspacePath;
+		if (src.url !== undefined) extra.url = src.url;
+		if (src.label !== undefined) extra.label = src.label;
+		if (src.content !== undefined) extra.content = src.content;
+		if (src.noteColor !== undefined) extra.noteColor = src.noteColor;
+		if (src.fontSize !== undefined) extra.fontSize = src.fontSize;
+		if (src.cwd !== undefined) extra.cwd = src.cwd;
+		const newTile = createCanvasTile(src.type, src.x + 30, src.y + 30, extra);
+		if (src.type === "term") {
+			spawnTerminalWebview(newTile, false);
+		} else if (src.type === "text") {
+			const dom = tileDOMs.get(newTile.id);
+			if (dom) {
+				const textEl = dom.contentArea.querySelector(".sticky-text");
+				if (textEl) textEl.textContent = src.content || "";
+			}
+		} else if (src.type === "draw" && src.imageData) {
+			const dom = tileDOMs.get(newTile.id);
+			if (dom && dom.drawCanvas) {
+				newTile.imageData = src.imageData;
+				requestAnimationFrame(() => restoreDrawing(dom.drawCanvas, src.imageData));
+			}
+		}
+		repositionAllTiles();
+		saveCanvasDebounced();
+		return newTile;
 	}
 
 	function clearTileFocusRing() {
@@ -2589,6 +2653,51 @@ async function init() {
 		}
 	});
 
+	// -- Cmd+D: Duplicate focused tile --
+	// -- Cmd+0: Reset zoom to 100% --
+
+	window.addEventListener("keydown", (e) => {
+		const isMac = navigator.platform.toUpperCase().includes("MAC");
+		const mod = isMac ? e.metaKey : e.ctrlKey;
+		if (!mod) return;
+
+		// Don't interfere with text editing
+		const focused = document.activeElement;
+		const isEditingText =
+			focused &&
+			(focused.isContentEditable ||
+				focused.tagName === "INPUT" ||
+				focused.tagName === "TEXTAREA");
+		if (isEditingText) return;
+
+		// Cmd+D: Duplicate focused tile
+		if (e.key === "d" && (activeSurface === "canvas" || activeSurface === "canvas-tile")) {
+			e.preventDefault();
+			const tileToDup = focusedTileId ? getTile(focusedTileId) : null;
+			if (tileToDup) {
+				duplicateTile(tileToDup);
+			}
+			return;
+		}
+
+		// Cmd+0: Reset zoom to 100%
+		if (e.key === "0") {
+			e.preventDefault();
+			const prevScale = canvasScale;
+			canvasScale = 1;
+			// Adjust pan to keep viewport center stable
+			const cw = canvasEl.clientWidth / 2;
+			const ch = canvasEl.clientHeight / 2;
+			const ratio = canvasScale / prevScale - 1;
+			canvasX -= (cw - canvasX) * ratio;
+			canvasY -= (ch - canvasY) * ratio;
+			showZoomIndicator();
+			updateCanvas();
+			repositionAllTiles();
+			return;
+		}
+	});
+
 	// -- Shift+scroll passthrough --
 	// When Shift is held, disable pointer-events on tile webviews so
 	// two-finger scroll falls through to the canvas pan handler.
@@ -3207,6 +3316,9 @@ init();
 		{ keys: "B (pen mode)", desc: "Brush tool" },
 		{ keys: "E (pen mode)", desc: "Eraser tool" },
 		{ keys: "\u2318Z (pen mode)", desc: "Undo last stroke" },
+		{ keys: "\u2318D", desc: "Duplicate focused tile" },
+		{ keys: "\u23180", desc: "Reset zoom to 100%" },
+		{ keys: "\u2318K", desc: "Focus search" },
 	];
 
 	// Populate rows
@@ -3390,6 +3502,7 @@ init();
 	// -- Empty canvas hint --
 
 	const emptyHint = document.getElementById("canvas-empty-hint");
+	emptyHint.innerHTML = "Right-click to create &nbsp;|&nbsp; Double-click for terminal &nbsp;|&nbsp; Drag files to import &nbsp;|&nbsp; ? for shortcuts";
 
 	function updateEmptyHint() {
 		if (tiles.length === 0) {
