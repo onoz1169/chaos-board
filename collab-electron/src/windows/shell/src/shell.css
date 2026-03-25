@@ -1896,6 +1896,16 @@ body {
 	border-color: rgba(59, 130, 246, 0.5);
 }
 
+#tool-layout-btn {
+	color: #a78bfa !important;
+	border-color: rgba(167, 139, 250, 0.2) !important;
+}
+
+#tool-layout-btn:hover {
+	background: rgba(167, 139, 250, 0.15) !important;
+	color: #c4b5fd !important;
+}
+
 .dock-launch-icon {
 	color: #22c55e !important;
 	border-color: rgba(34, 197, 94, 0.25) !important;

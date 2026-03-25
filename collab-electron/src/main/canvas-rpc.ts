@@ -141,4 +141,41 @@ export function registerCanvasRpc(win: BrowserWindow): void {
       },
     },
   );
+
+  registerMethod(
+    "canvas.tileGetContent",
+    (params) => sendToShell("canvas.tileGetContent", params),
+    {
+      description:
+        "Read the content of a tile (sticky note text, note content, code content)",
+      params: { tileId: "ID of the tile to read content from" },
+    },
+  );
+
+  registerMethod(
+    "canvas.tileBatch",
+    (params) => sendToShell("canvas.tileBatch", params),
+    {
+      description:
+        "Execute multiple tile operations in a single call",
+      params: {
+        operations:
+          "Array of operations, each with { method, params }",
+      },
+    },
+  );
+
+  registerMethod(
+    "canvas.autoLayout",
+    (params) => sendToShell("canvas.autoLayout", params),
+    {
+      description: "Auto-arrange tiles on the canvas",
+      params: {
+        algorithm:
+          '(optional) Layout algorithm to use (default: "grid")',
+        tileIds: "(optional) Array of tile IDs to arrange",
+        options: "(optional) Algorithm-specific options",
+      },
+    },
+  );
 }

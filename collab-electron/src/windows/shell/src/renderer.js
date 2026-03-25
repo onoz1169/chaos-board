@@ -2525,6 +2525,13 @@ async function init() {
 			}
 		}
 
+		// Cmd+Shift+A: Auto-layout grid
+		if (e.key === "a" && (e.metaKey || e.ctrlKey) && e.shiftKey) {
+			e.preventDefault();
+			executeCanvasRpc("autoLayout", { algorithm: "grid", options: { columns: 3 } });
+			return;
+		}
+
 		// Arrow keys: move selected tiles
 		if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
 			const sel = getSelectedTiles();
@@ -2992,161 +2999,225 @@ async function init() {
 		return { x: 40, y: 40 };
 	}
 
+	function executeCanvasRpc(method, params) {
+		switch (method) {
+			case "tileList": {
+				return {
+					tiles: tiles.map((t) => ({
+						id: t.id,
+						type: t.type,
+						filePath: t.filePath,
+						folderPath: t.folderPath,
+						position: { x: t.x, y: t.y },
+						size: { width: t.width, height: t.height },
+					})),
+				};
+			}
+			case "tileAdd": {
+				const tileType = params.tileType || "note";
+				const size = defaultSize(tileType);
+				const pos = params.position
+					? { x: params.position.x, y: params.position.y }
+					: findAutoPlacement(size.width, size.height);
+
+				let tile;
+				if (tileType === "graph") {
+					const wsPath = workspaces[activeIndex]?.path ?? "";
+					tile = createCanvasTile("graph", pos.x, pos.y, {
+						folderPath: params.filePath,
+						workspacePath: wsPath,
+					});
+					spawnGraphWebview(tile);
+				} else {
+					tile = createCanvasTile(tileType, pos.x, pos.y, {
+						filePath: params.filePath,
+					});
+					const dom = tileDOMs.get(tile.id);
+					if (dom && tileType === "image") {
+						const img = document.createElement("img");
+						img.src = `collab-file://${params.filePath}`;
+						img.style.width = "100%";
+						img.style.height = "100%";
+						img.style.objectFit = "contain";
+						img.draggable = false;
+						dom.contentArea.appendChild(img);
+					} else if (dom) {
+						const wv = document.createElement("webview");
+						const viewerConfig = configs.viewer;
+						const mode = tileType === "note" ? "note" : "code";
+						wv.setAttribute(
+							"src",
+							`${viewerConfig.src}?tilePath=${encodeURIComponent(params.filePath)}&tileMode=${mode}`,
+						);
+						wv.setAttribute("preload", viewerConfig.preload);
+						wv.setAttribute(
+							"webpreferences",
+							"contextIsolation=yes, sandbox=yes",
+						);
+						wv.style.width = "100%";
+						wv.style.height = "100%";
+						wv.style.border = "none";
+						dom.contentArea.appendChild(wv);
+						dom.webview = wv;
+					}
+				}
+				saveCanvasImmediate();
+				return { tileId: tile.id };
+			}
+			case "tileRemove": {
+				const tile = getTile(params.tileId);
+				if (!tile) throw Object.assign(new Error("Tile not found"), { code: 3 });
+				closeCanvasTile(params.tileId);
+				return {};
+			}
+			case "tileMove": {
+				const tile = getTile(params.tileId);
+				if (!tile) throw Object.assign(new Error("Tile not found"), { code: 3 });
+				tile.x = params.position.x;
+				tile.y = params.position.y;
+				snapToGrid(tile);
+				repositionAllTiles();
+				saveCanvasImmediate();
+				return {};
+			}
+			case "tileResize": {
+				const tile = getTile(params.tileId);
+				if (!tile) throw Object.assign(new Error("Tile not found"), { code: 3 });
+				tile.width = params.size.width;
+				tile.height = params.size.height;
+				snapToGrid(tile);
+				repositionAllTiles();
+				saveCanvasImmediate();
+				return {};
+			}
+			case "tileGetContent": {
+				const tile = tiles.find(t => t.id === params.tileId);
+				if (!tile) throw Object.assign(new Error("Tile not found"), { code: 3 });
+
+				let content = "";
+				const dom = tileDOMs.get(tile.id);
+
+				if (tile.type === "text") {
+					// Sticky note - get contenteditable text
+					const textEl = dom?.contentArea?.querySelector(".sticky-text");
+					content = textEl?.textContent || tile.content || "";
+				} else if (tile.type === "term") {
+					// Terminal - return label/cwd info
+					content = JSON.stringify({ label: tile.label, cwd: tile.cwd });
+				} else if (tile.type === "browser") {
+					content = JSON.stringify({ url: tile.url, label: tile.label });
+				} else {
+					// For file-based tiles (note, code, image), return the filePath
+					content = JSON.stringify({ filePath: tile.filePath, label: tile.label });
+				}
+
+				return { tileId: tile.id, type: tile.type, content };
+			}
+			case "tileBatch": {
+				const results = [];
+				for (const op of params.operations) {
+					try {
+						const result = executeCanvasRpc(op.method, op.params || {});
+						results.push({ success: true, result });
+					} catch (err) {
+						results.push({ success: false, error: err.message });
+					}
+				}
+				saveCanvasImmediate();
+				return { results };
+			}
+			case "autoLayout": {
+				const { algorithm, tileIds, options } = params;
+				const gap = options?.gap || 30;
+				const startX = options?.startX || 100;
+				const startY = options?.startY || 100;
+				const cols = options?.columns || 3;
+
+				// Get target tiles (all if no tileIds specified)
+				let targetTiles = tileIds
+					? tiles.filter(t => tileIds.includes(t.id))
+					: [...tiles];
+
+				if (targetTiles.length === 0) return { moved: 0 };
+
+				if (algorithm === "grid") {
+					targetTiles.forEach((tile, i) => {
+						const col = i % cols;
+						const row = Math.floor(i / cols);
+						const tileW = tile.width || 400;
+						const tileH = tile.height || 300;
+						tile.x = startX + col * (tileW + gap);
+						tile.y = startY + row * (tileH + gap);
+						const dom = tileDOMs.get(tile.id);
+						if (dom) {
+							dom.container.style.left = tile.x + "px";
+							dom.container.style.top = tile.y + "px";
+						}
+					});
+				} else if (algorithm === "horizontal") {
+					let curX = startX;
+					targetTiles.forEach((tile) => {
+						tile.x = curX;
+						tile.y = startY;
+						const dom = tileDOMs.get(tile.id);
+						if (dom) {
+							dom.container.style.left = tile.x + "px";
+							dom.container.style.top = tile.y + "px";
+						}
+						curX += (tile.width || 400) + gap;
+					});
+				} else if (algorithm === "vertical") {
+					let curY = startY;
+					targetTiles.forEach((tile) => {
+						tile.x = startX;
+						tile.y = curY;
+						const dom = tileDOMs.get(tile.id);
+						if (dom) {
+							dom.container.style.left = tile.x + "px";
+							dom.container.style.top = tile.y + "px";
+						}
+						curY += (tile.height || 300) + gap;
+					});
+				}
+
+				saveCanvasImmediate();
+				return { moved: targetTiles.length, algorithm };
+			}
+			case "viewportGet": {
+				return {
+					pan: { x: canvasX, y: canvasY },
+					zoom: canvasScale,
+				};
+			}
+			case "viewportSet": {
+				if (params.pan) {
+					canvasX = params.pan.x;
+					canvasY = params.pan.y;
+				}
+				if (params.zoom !== undefined) {
+					canvasScale = params.zoom;
+				}
+				updateCanvas();
+				saveCanvasDebounced();
+				return {};
+			}
+			default: {
+				throw Object.assign(new Error(`Unknown method: ${method}`), { code: -32601 });
+			}
+		}
+	}
+
 	function handleCanvasRpc(request) {
 		const { requestId, method, params } = request;
 
 		try {
-			let result;
-			switch (method) {
-				case "tileList": {
-					result = {
-						tiles: tiles.map((t) => ({
-							id: t.id,
-							type: t.type,
-							filePath: t.filePath,
-							folderPath: t.folderPath,
-							position: { x: t.x, y: t.y },
-							size: { width: t.width, height: t.height },
-						})),
-					};
-					break;
-				}
-				case "tileAdd": {
-					const tileType = params.tileType || "note";
-					const size = defaultSize(tileType);
-					const pos = params.position
-						? { x: params.position.x, y: params.position.y }
-						: findAutoPlacement(size.width, size.height);
-
-					let tile;
-					if (tileType === "graph") {
-						const wsPath = workspaces[activeIndex]?.path ?? "";
-						tile = createCanvasTile("graph", pos.x, pos.y, {
-							folderPath: params.filePath,
-							workspacePath: wsPath,
-						});
-						spawnGraphWebview(tile);
-					} else {
-						tile = createCanvasTile(tileType, pos.x, pos.y, {
-							filePath: params.filePath,
-						});
-						const dom = tileDOMs.get(tile.id);
-						if (dom && tileType === "image") {
-							const img = document.createElement("img");
-							img.src = `collab-file://${params.filePath}`;
-							img.style.width = "100%";
-							img.style.height = "100%";
-							img.style.objectFit = "contain";
-							img.draggable = false;
-							dom.contentArea.appendChild(img);
-						} else if (dom) {
-							const wv = document.createElement("webview");
-							const viewerConfig = configs.viewer;
-							const mode = tileType === "note" ? "note" : "code";
-							wv.setAttribute(
-								"src",
-								`${viewerConfig.src}?tilePath=${encodeURIComponent(params.filePath)}&tileMode=${mode}`,
-							);
-							wv.setAttribute("preload", viewerConfig.preload);
-							wv.setAttribute(
-								"webpreferences",
-								"contextIsolation=yes, sandbox=yes",
-							);
-							wv.style.width = "100%";
-							wv.style.height = "100%";
-							wv.style.border = "none";
-							dom.contentArea.appendChild(wv);
-							dom.webview = wv;
-						}
-					}
-					saveCanvasImmediate();
-					result = { tileId: tile.id };
-					break;
-				}
-				case "tileRemove": {
-					const tile = getTile(params.tileId);
-					if (!tile) {
-						window.shellApi.canvasRpcResponse({
-							requestId,
-							error: { code: 3, message: "Tile not found" },
-						});
-						return;
-					}
-					closeCanvasTile(params.tileId);
-					result = {};
-					break;
-				}
-				case "tileMove": {
-					const tile = getTile(params.tileId);
-					if (!tile) {
-						window.shellApi.canvasRpcResponse({
-							requestId,
-							error: { code: 3, message: "Tile not found" },
-						});
-						return;
-					}
-					tile.x = params.position.x;
-					tile.y = params.position.y;
-					snapToGrid(tile);
-					repositionAllTiles();
-					saveCanvasImmediate();
-					result = {};
-					break;
-				}
-				case "tileResize": {
-					const tile = getTile(params.tileId);
-					if (!tile) {
-						window.shellApi.canvasRpcResponse({
-							requestId,
-							error: { code: 3, message: "Tile not found" },
-						});
-						return;
-					}
-					tile.width = params.size.width;
-					tile.height = params.size.height;
-					snapToGrid(tile);
-					repositionAllTiles();
-					saveCanvasImmediate();
-					result = {};
-					break;
-				}
-				case "viewportGet": {
-					result = {
-						pan: { x: canvasX, y: canvasY },
-						zoom: canvasScale,
-					};
-					break;
-				}
-				case "viewportSet": {
-					if (params.pan) {
-						canvasX = params.pan.x;
-						canvasY = params.pan.y;
-					}
-					if (params.zoom !== undefined) {
-						canvasScale = params.zoom;
-					}
-					updateCanvas();
-					saveCanvasDebounced();
-					result = {};
-					break;
-				}
-				default: {
-					window.shellApi.canvasRpcResponse({
-						requestId,
-						error: {
-							code: -32601,
-							message: `Unknown method: ${method}`,
-						},
-					});
-					return;
-				}
-			}
+			const result = executeCanvasRpc(method, params);
 			window.shellApi.canvasRpcResponse({ requestId, result });
 		} catch (err) {
 			window.shellApi.canvasRpcResponse({
 				requestId,
 				error: {
-					code: -32603,
+					code: err.code || -32603,
 					message: err.message || "Internal error",
 				},
 			});
@@ -3331,6 +3402,7 @@ init();
 		{ keys: "\u2318D", desc: "Duplicate focused tile" },
 		{ keys: "\u23180", desc: "Reset zoom to 100%" },
 		{ keys: "\u2318K", desc: "Focus search" },
+		{ keys: "\u2318\u21E7A", desc: "Auto-layout grid" },
 	];
 
 	// Populate rows
@@ -3515,6 +3587,15 @@ init();
 		if (!btn) continue;
 		btn.addEventListener("mousedown", (e) => e.stopPropagation());
 		btn.addEventListener("click", () => setActiveTool(key));
+	}
+
+	// Layout button (not a mode toggle, fires action directly)
+	const layoutBtn = document.getElementById("tool-layout-btn");
+	if (layoutBtn) {
+		layoutBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+		layoutBtn.addEventListener("click", () => {
+			executeCanvasRpc("canvas.autoLayout", { algorithm: "grid", options: { columns: 3 } });
+		});
 	}
 
 	// Override pen/eraser button behavior to use unified system
