@@ -1333,7 +1333,7 @@ body {
 	font-size: 10px;
 	font-weight: 600;
 	padding: 0 4px;
-	color: rgba(0, 0, 0, 0.5);
+	color: rgba(255, 255, 255, 0.6);
 	background: transparent;
 	border: none;
 	cursor: pointer;
@@ -1342,7 +1342,7 @@ body {
 
 .sticky-font-down:hover,
 .sticky-font-up:hover {
-	color: rgba(0, 0, 0, 0.8);
+	color: rgba(255, 255, 255, 0.9);
 }
 
 .sticky-text {
