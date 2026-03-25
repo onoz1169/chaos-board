@@ -2624,6 +2624,9 @@ async function init() {
 
 	window.addEventListener("keydown", (e) => {
 		if (e.code === "Space" && !e.target.closest?.("webview")) {
+			// Don't intercept space when typing in an input or contenteditable
+			const focused = document.activeElement;
+			if (focused && (focused.tagName === "INPUT" || focused.tagName === "TEXTAREA" || focused.isContentEditable)) return;
 			e.preventDefault();
 			if (!e.repeat && !spaceHeld) {
 				spaceHeld = true;
