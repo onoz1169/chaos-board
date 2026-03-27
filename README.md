@@ -1,21 +1,35 @@
-# Collaborator
+# chaos-board
 
-Collaborator is a place to build with agents.
+chaos-board is a place to build with agents — an enhanced fork of [Collaborator](https://github.com/collaborator-ai/collab-public) with additional features focused on workflow organization and canvas tooling.
 
-![Collaborator](screenshot.png)
+![chaos-board](screenshot.png)
 
-Collaborator is an end-to-end environment for agentic development. Terminals, context files, and running code — all arranged on an infinite canvas in one place. No context switching, no tab hunting. Just your agents and your work, side by side.
+An end-to-end environment for agentic development. Terminals, context files, and running code — all arranged on an infinite canvas in one place. No context switching, no tab hunting. Just your agents and your work, side by side.
 
 The app is early-stage and in active development. macOS only for now.
 
+## Enhancements over Collaborator
+
+- **STIMULUS / WILL / SUPPLY zones** — color-coded canvas areas to partition work into intake, own projects, and client work
+- **Bottom icon dock** — Miro-style always-visible toolbar for quick tile creation and tool switching
+- **Pen/draw mode** — freehand drawing overlay with brush and eraser, viewport-aware stroke rendering
+- **Draw tile** — embed a drawing canvas as a tile on the board
+- **Sticky note tile** — rich text sticky notes with font size controls and color theming
+- **Copy/paste tiles** — Cmd+C / Cmd+V with offset stacking; terminal tiles paste as new sessions
+- **Auto-layout** — batch tile arrangement
+- **Tile content API** — programmatic access to tile content for agent use
+- **Terminal naming and group highlight** — identify and visually group terminal sessions
+- **Keyboard shortcuts** — B/E for brush/eraser, extended shortcut help modal
+
 ## Install
 
-**[Download the latest release](https://github.com/collaborator-ai/collab-public/releases/latest)** (macOS, Apple Silicon)
-
-Or install from the command line:
+Clone and run locally:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/collaborator-ai/collab-public/main/install.sh | bash
+git clone https://github.com/onoz1169/chaos-board.git
+cd chaos-board/collab-electron
+bun install
+bun run dev
 ```
 
 ## Stack
@@ -230,14 +244,3 @@ Canvas state is saved 500ms after each change (debounced) and immediately when t
 }
 ```
 
-## Star History
-
-<a href="https://www.star-history.com/?repos=collaborator-ai%2Fcollab-public&type=timeline&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=collaborator-ai/collab-public&type=timeline&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=collaborator-ai/collab-public&type=timeline&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=collaborator-ai/collab-public&type=timeline&legend=top-left" />
- </picture>
-</a>
-
-⠀
