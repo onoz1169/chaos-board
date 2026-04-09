@@ -1,4 +1,4 @@
-import { strokes, beginStroke, addPoint, getVisibleStrokes, clearStrokes, undoStroke } from "./pen-stroke-state.js";
+import { strokes, beginStroke, addPoint, getVisibleStrokes, clearStrokes, undoStroke, removeStrokes } from "./pen-stroke-state.js";
 
 /** @type {boolean} */
 let penModeActive = false;
@@ -18,6 +18,11 @@ let currentTool = "brush"; // "brush" | "eraser"
 let activeStroke = null;
 let lastX = 0;
 let lastY = 0;
+
+// Marquee selection state
+let marquee = null; // { startX, startY, endX, endY } in canvas coords
+/** @type {Set<string>} */
+let selectedStrokeIds = new Set();
 
 /**
  * Initialize the pen overlay. Call once after DOM is ready.
@@ -56,15 +61,20 @@ export function initPenOverlay(parentEl, opts) {
         e.stopPropagation();
         overlayCanvas.setPointerCapture(e.pointerId);
 
-        const pressure = e.pointerType === "pen" ? e.pressure : 0.5;
-        // Convert screen coords to canvas coords using the viewport
-        // Viewport values are passed via redraw, so we store them
         const cx = (e.offsetX - _vp.panX) / _vp.zoom;
         const cy = (e.offsetY - _vp.panY) / _vp.zoom;
 
+        // Shift+drag with eraser = marquee select
+        if (e.shiftKey && currentTool === "eraser") {
+            marquee = { startX: cx, startY: cy, endX: cx, endY: cy };
+            selectedStrokeIds.clear();
+            return;
+        }
+
+        const pressure = e.pointerType === "pen" ? e.pressure : 0.5;
         activeStroke = beginStroke(
             currentTool === "eraser" ? "#000000" : currentColor,
-            currentSize,
+            currentTool === "eraser" ? currentSize * 5 : currentSize,
             currentTool
         );
         addPoint(activeStroke, cx, cy, pressure);
@@ -73,7 +83,19 @@ export function initPenOverlay(parentEl, opts) {
     });
 
     overlayCanvas.addEventListener("pointermove", (e) => {
-        if (!activeStroke || !penModeActive) return;
+        if (!penModeActive) return;
+
+        // Marquee drag
+        if (marquee) {
+            e.preventDefault();
+            e.stopPropagation();
+            marquee.endX = (e.offsetX - _vp.panX) / _vp.zoom;
+            marquee.endY = (e.offsetY - _vp.panY) / _vp.zoom;
+            redraw(_vp.panX, _vp.panY, _vp.zoom);
+            return;
+        }
+
+        if (!activeStroke) return;
         e.preventDefault();
         e.stopPropagation();
 
@@ -91,6 +113,23 @@ export function initPenOverlay(parentEl, opts) {
     });
 
     function endStroke(e) {
+        // Marquee release: find intersecting strokes
+        if (marquee) {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            const r = { minX: Math.min(marquee.startX, marquee.endX), minY: Math.min(marquee.startY, marquee.endY),
+                        maxX: Math.max(marquee.startX, marquee.endX), maxY: Math.max(marquee.startY, marquee.endY) };
+            selectedStrokeIds.clear();
+            for (const s of strokes) {
+                if (s.bounds.maxX >= r.minX && s.bounds.minX <= r.maxX &&
+                    s.bounds.maxY >= r.minY && s.bounds.minY <= r.maxY) {
+                    selectedStrokeIds.add(s.id);
+                }
+            }
+            marquee = null;
+            redraw(_vp.panX, _vp.panY, _vp.zoom);
+            return;
+        }
+
         if (!activeStroke) return;
         if (e) {
             e.preventDefault();
@@ -110,6 +149,19 @@ export function initPenOverlay(parentEl, opts) {
     overlayCanvas.addEventListener("pointerup", endStroke);
     overlayCanvas.addEventListener("pointerleave", endStroke);
     overlayCanvas.addEventListener("pointercancel", endStroke);
+
+    // Delete selected strokes
+    document.addEventListener("keydown", (e) => {
+        if (!penModeActive || selectedStrokeIds.size === 0) return;
+        if (e.key === "Delete" || e.key === "Backspace") {
+            e.preventDefault();
+            removeStrokes(selectedStrokeIds);
+            selectedStrokeIds.clear();
+            redraw(_vp.panX, _vp.panY, _vp.zoom);
+            if (opts.onStrokeEnd) opts.onStrokeEnd();
+        }
+        if (e.key === "Escape") selectedStrokeIds.clear(), redraw(_vp.panX, _vp.panY, _vp.zoom);
+    });
 }
 
 // Cached viewport for use in pointer handlers
@@ -144,6 +196,30 @@ export function redraw(panX, panY, zoom) {
 
     for (const stroke of visible) {
         drawFullStroke(stroke);
+        // Highlight selected strokes
+        if (selectedStrokeIds.has(stroke.id)) {
+            ctx.save();
+            ctx.strokeStyle = "#ff4444";
+            ctx.lineWidth = 2;
+            ctx.setLineDash([6, 4]);
+            const b = stroke.bounds;
+            const sx = b.minX * zoom + panX - 4, sy = b.minY * zoom + panY - 4;
+            const sw = (b.maxX - b.minX) * zoom + 8, sh = (b.maxY - b.minY) * zoom + 8;
+            ctx.strokeRect(sx, sy, sw, sh);
+            ctx.restore();
+        }
+    }
+
+    // Draw marquee rectangle
+    if (marquee) {
+        ctx.save();
+        ctx.strokeStyle = "#4488ff";
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 5]);
+        const mx = marquee.startX * zoom + panX, my = marquee.startY * zoom + panY;
+        const mw = (marquee.endX - marquee.startX) * zoom, mh = (marquee.endY - marquee.startY) * zoom;
+        ctx.strokeRect(mx, my, mw, mh);
+        ctx.restore();
     }
 }
 

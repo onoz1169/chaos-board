@@ -66,6 +66,16 @@ export function removeStroke(id) {
 }
 
 /**
+ * Remove multiple strokes by ID set.
+ * @param {Set<string>} ids
+ */
+export function removeStrokes(ids) {
+    for (let i = strokes.length - 1; i >= 0; i--) {
+        if (ids.has(strokes[i].id)) strokes.splice(i, 1);
+    }
+}
+
+/**
  * Clear all strokes.
  */
 export function clearStrokes() {

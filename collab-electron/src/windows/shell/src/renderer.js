@@ -3868,8 +3868,8 @@ init();
 			}
 		}
 
-		// P key = toggle pen mode, Escape = exit pen mode
-		if ((e.key === "p" || (e.key === "Escape" && isPenMode())) && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+		// P key = pen mode, V key or Escape = select mode (exit pen)
+		if ((e.key === "p" || e.key === "v" || (e.key === "Escape" && isPenMode())) && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
 			const focused = document.activeElement;
 			const isEditing = focused && (
 				focused.isContentEditable ||
@@ -3879,10 +3879,12 @@ init();
 			);
 			if (!isEditing) {
 				e.preventDefault();
-				if (e.key === "Escape" || isPenMode()) {
+				if (e.key === "v" || e.key === "Escape") {
 					deactivatePen();
-				} else {
+				} else if (e.key === "p" && !isPenMode()) {
 					activatePenWithTool("brush");
+				} else if (e.key === "p" && isPenMode()) {
+					deactivatePen();
 				}
 				return;
 			}
