@@ -4,8 +4,6 @@ An infinite canvas workspace for building with AI agents — forked from [Collab
 
 > **Origin:** This project is an enhanced fork of [Collaborator](https://github.com/collaborator-ai/collab-public) (`@collaborator/electron`). Collaborator provides the core architecture — Electron shell, multi-webview terminal system, file tree navigator, and canvas tile engine. chaos-board builds on top of that foundation with zone-based spatial organization, shape/connector tools, pen drawing, and workflow features described below.
 
-![chaos-board](screenshot.png)
-
 Terminals, context files, browsers, shapes, and drawings — all arranged on an infinite canvas. No context switching, no tab hunting. Just your agents and your work, side by side.
 
 The app is early-stage and in active development. macOS only for now.
