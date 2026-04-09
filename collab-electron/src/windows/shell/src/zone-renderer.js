@@ -1,40 +1,100 @@
 /**
  * Canvas zone renderer.
  *
- * Draws persistent background zones that visually partition the canvas
- * into STIMULUS / WILL / SUPPLY areas.
+ * Draws persistent background zones that visually partition the canvas.
+ *
+ * Work zones:    STIMULUS / WILL / SUPPLY (top row)
+ * Shared zone:   REFLECT (center, bridges work and life)
+ * Life zones:    PLAY / LEARN / LIFE (bottom row)
  */
 
+const ZONE_W = 4200;
+const ZONE_GAP = 500;
+const WORK_H = 3000;
+const REFLECT_H = 2000;
+const LIFE_H = 3000;
+
+const COL0 = 40;
+const COL1 = COL0 + ZONE_W + ZONE_GAP;
+const COL2 = COL1 + ZONE_W + ZONE_GAP;
+
+const ROW_WORK = 40;
+const ROW_REFLECT = ROW_WORK + WORK_H + ZONE_GAP;
+const ROW_LIFE = ROW_REFLECT + REFLECT_H + ZONE_GAP;
+
 const ZONES = [
+	// ── Work (top row) ──
 	{
 		id: "zone-stimulus",
 		label: "STIMULUS",
-		color: "rgba(80,140,255,0.05)",
-		borderColor: "rgba(80,140,255,0.35)",
-		x: 40,
-		y: 40,
-		width: 1000,
-		height: 10000,
+		color: "rgba(80,140,255,0.12)",
+		borderColor: "rgba(80,140,255,0.7)",
+		x: COL0,
+		y: ROW_WORK,
+		width: ZONE_W,
+		height: WORK_H,
 	},
 	{
 		id: "zone-will",
 		label: "WILL",
-		color: "rgba(60,180,100,0.05)",
-		borderColor: "rgba(60,180,100,0.35)",
-		x: 1100,
-		y: 40,
-		width: 1000,
-		height: 10000,
+		color: "rgba(60,180,100,0.12)",
+		borderColor: "rgba(60,180,100,0.7)",
+		x: COL1,
+		y: ROW_WORK,
+		width: ZONE_W,
+		height: WORK_H,
 	},
 	{
 		id: "zone-supply",
 		label: "SUPPLY",
-		color: "rgba(220,80,80,0.05)",
-		borderColor: "rgba(220,80,80,0.35)",
-		x: 2160,
-		y: 40,
-		width: 1000,
-		height: 10000,
+		color: "rgba(220,80,80,0.12)",
+		borderColor: "rgba(220,80,80,0.7)",
+		x: COL2,
+		y: ROW_WORK,
+		width: ZONE_W,
+		height: WORK_H,
+	},
+	// ── Shared (center) ──
+	{
+		id: "zone-reflect",
+		label: "REFLECT",
+		color: "rgba(200,180,120,0.12)",
+		borderColor: "rgba(200,180,120,0.7)",
+		x: COL1,
+		y: ROW_REFLECT,
+		width: ZONE_W,
+		height: REFLECT_H,
+	},
+	// ── Life (bottom row) ──
+	{
+		id: "zone-play",
+		label: "PLAY",
+		color: "rgba(255,150,50,0.12)",
+		borderColor: "rgba(255,150,50,0.7)",
+		x: COL0,
+		y: ROW_LIFE,
+		width: ZONE_W,
+		height: LIFE_H,
+	},
+	{
+		id: "zone-learn",
+		label: "LEARN",
+		color: "rgba(160,120,220,0.12)",
+		borderColor: "rgba(160,120,220,0.7)",
+		x: COL1,
+		y: ROW_LIFE,
+		width: ZONE_W,
+		height: LIFE_H,
+	},
+	{
+		id: "zone-life",
+		label: "LIFE",
+		color: "rgba(220,100,160,0.12)",
+		borderColor: "rgba(220,100,160,0.7)",
+		x: COL2,
+		y: ROW_LIFE,
+		width: ZONE_W,
+		height: LIFE_H,
 	},
 ];
 
@@ -134,4 +194,18 @@ export function repositionZones(panX, panY, zoom) {
 		el.style.width = `${zone.width * zoom}px`;
 		el.style.height = `${zone.height * zoom}px`;
 	}
+}
+
+/**
+ * Get the center point of a zone (in canvas coordinates).
+ * @param {string} zoneId
+ * @returns {{ x: number, y: number } | null}
+ */
+export function getZoneCenter(zoneId) {
+	const zone = ZONES.find((z) => z.id === zoneId);
+	if (!zone) return null;
+	return {
+		x: zone.x + zone.width / 2,
+		y: zone.y + zone.height / 2,
+	};
 }

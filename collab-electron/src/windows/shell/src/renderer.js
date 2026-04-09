@@ -16,7 +16,7 @@ import {
 	fromJSON as groupsFromJSON,
 } from "./group-state.js";
 import { initGroupLayer, renderGroups } from "./group-renderer.js";
-import { initZoneLayer, repositionZones, getTilesInZone, getZoneAtPoint, flashZone } from "./zone-renderer.js";
+import { initZoneLayer, repositionZones, getTilesInZone, getZoneAtPoint, flashZone, getZones, getZoneCenter } from "./zone-renderer.js";
 import { attachDrawing, restoreDrawing, clearDrawing } from "./draw-interactions.js";
 import { createDrawToolbar } from "./draw-toolbar.js";
 import { strokes as penStrokes, clearStrokes as clearPenStrokes, undoStroke, toJSON as penStrokesToJSON, fromJSON as penStrokesFromJSON } from "./pen-stroke-state.js";
@@ -33,18 +33,8 @@ function applyCanvasOpacity(percent) {
 }
 
 function initDarkMode() {
-	const query = "(prefers-color-scheme: dark)";
-	function sync() {
-		document.documentElement.classList.toggle(
-			"dark",
-			window.matchMedia(query).matches,
-		);
-	}
-	sync();
-	window.matchMedia(query).addEventListener("change", () => {
-		sync();
-		drawGrid();
-	});
+	// Default to dark mode always
+	document.documentElement.classList.add("dark");
 }
 
 initDarkMode();
@@ -821,7 +811,6 @@ async function init() {
 
 		wv.addEventListener("dom-ready", () => {
 			if (autoFocus) focusCanvasTile(tile.id);
-			wv.addEventListener("before-input-event", () => {});
 		});
 
 		wv.addEventListener("ipc-message", (event) => {
@@ -1758,6 +1747,9 @@ async function init() {
 		const cy = (screenY - canvasY) / canvasScale;
 
 		const menuItems = [
+			{ id: "search-tiles", label: "Search tiles (\u2318K)" },
+			{ id: "jump-zone", label: "Jump to zone (\u2318J)" },
+			{ separator: true },
 			{ id: "new-terminal", label: "\uFF0B Terminal" },
 			{ id: "new-text", label: "\uFF0B Text file" },
 			{ id: "new-sticky", label: "\uFF0B Sticky note" },
@@ -1776,7 +1768,11 @@ async function init() {
 		}
 		const selected = await showCanvasContextMenu(e.clientX, e.clientY, menuItems);
 
-		if (selected === "new-terminal") {
+		if (selected === "search-tiles") {
+			if (window.__openTileSearch) window.__openTileSearch();
+		} else if (selected === "jump-zone") {
+			if (window.__openZoneJumpPalette) window.__openZoneJumpPalette();
+		} else if (selected === "new-terminal") {
 			const ws = getActiveWorkspace();
 			const cwd = ws ? ws.path : undefined;
 			const tile = createCanvasTile("term", cx, cy, { cwd });
@@ -2532,6 +2528,21 @@ async function init() {
 			return;
 		}
 
+		// 1-7: Jump to zone (when no tile selected, no input focused)
+		if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey
+			&& e.key >= "1" && e.key <= "7"
+			&& document.activeElement?.tagName !== "INPUT"
+			&& document.activeElement?.tagName !== "TEXTAREA"
+			&& getSelectedTiles().length === 0) {
+			const zones = getZones();
+			const idx = parseInt(e.key) - 1;
+			if (idx < zones.length) {
+				e.preventDefault();
+				executeCanvasRpc("jumpToZone", { zoneId: zones[idx].id });
+				return;
+			}
+		}
+
 		// Arrow keys: move selected tiles
 		if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
 			const sel = getSelectedTiles();
@@ -3128,7 +3139,7 @@ async function init() {
 			}
 			case "autoLayout": {
 				const { algorithm, tileIds, options } = params;
-				const gap = options?.gap || 30;
+				const gap = options?.gap || 60;
 				const startX = options?.startX || 100;
 				const startY = options?.startY || 100;
 				const cols = options?.columns || 3;
@@ -3201,6 +3212,63 @@ async function init() {
 				saveCanvasDebounced();
 				return {};
 			}
+			case "jumpToZone": {
+				const zone = getZones().find(z => z.id === params.zoneId);
+				if (!zone) return { error: "zone not found" };
+				const container = document.getElementById("panel-viewer");
+				if (!container) return {};
+				const rect = container.getBoundingClientRect();
+				const fitZoom = Math.min(
+					rect.width * 0.85 / zone.width,
+					rect.height * 0.85 / zone.height,
+				);
+				canvasScale = Math.max(0.15, Math.min(fitZoom, ZOOM_MAX));
+				const cx = zone.x + zone.width / 2;
+				const cy = zone.y + zone.height / 2;
+				canvasX = -cx * canvasScale + rect.width / 2;
+				canvasY = -cy * canvasScale + rect.height / 2;
+				updateCanvas();
+				flashZone(params.zoneId);
+				saveCanvasDebounced();
+				return { jumped: params.zoneId };
+			}
+			case "searchTiles": {
+				const query = (params.query || "").toLowerCase();
+				if (!query) return { results: [] };
+				const results = tiles
+					.filter(t => {
+						const searchText = [
+							t.label, t.title, t.cwd, t.filePath, t.url,
+							getTileLabel(t).name, getTileLabel(t).parent,
+						].filter(Boolean).join(" ").toLowerCase();
+						return searchText.includes(query);
+					})
+					.map(t => ({ id: t.id, title: getTileLabel(t).name, x: t.x, y: t.y, type: t.type }));
+				return { results };
+			}
+			case "jumpToTile": {
+				const tile = tiles.find(t => t.id === params.tileId);
+				if (!tile) return { error: "tile not found" };
+				const container = document.getElementById("panel-viewer");
+				if (!container) return {};
+				const rect = container.getBoundingClientRect();
+				const tw = tile.width || 400;
+				const th = tile.height || 300;
+				const padding = 80;
+				const fitZoom = Math.min(
+					(rect.width - padding * 2) / tw,
+					(rect.height - padding * 2) / th,
+					ZOOM_MAX,
+				);
+				canvasScale = Math.max(ZOOM_MIN, Math.min(fitZoom, 0.8));
+				const cx = tile.x + tw / 2;
+				const cy = tile.y + th / 2;
+				canvasX = -cx * canvasScale + rect.width / 2;
+				canvasY = -cy * canvasScale + rect.height / 2;
+				updateCanvas();
+				saveCanvasDebounced();
+				return { jumped: tile.id };
+			}
 			default: {
 				throw Object.assign(new Error(`Unknown method: ${method}`), { code: -32601 });
 			}
@@ -3225,6 +3293,127 @@ async function init() {
 	}
 
 	window.shellApi.onCanvasRpcRequest(handleCanvasRpc);
+
+	// ── Palette functions (inside init so they can access executeCanvasRpc) ──
+
+	function closePalette() {
+		const el = document.getElementById("palette-overlay");
+		if (el) {
+			if (el._keyHandler) document.removeEventListener("keydown", el._keyHandler);
+			el.remove();
+		}
+	}
+
+	function openZoneJumpPalette() {
+		closePalette();
+		const zones = getZones();
+		const overlay = document.createElement("div");
+		overlay.id = "palette-overlay";
+		overlay.style.cssText = "position:fixed;bottom:16px;right:16px;z-index:9999;";
+
+		const box = document.createElement("div");
+		box.style.cssText = "background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:8px;width:320px;box-shadow:0 8px 32px rgba(0,0,0,0.6);";
+
+		const title = document.createElement("div");
+		title.textContent = "Jump to Zone";
+		title.style.cssText = "font-size:11px;color:#666;padding:4px 8px 8px;letter-spacing:2px;";
+		box.appendChild(title);
+
+		const ZONE_KEYS = ["1","2","3","4","5","6","7"];
+		zones.forEach((zone, i) => {
+			const btn = document.createElement("button");
+			btn.style.cssText = "display:flex;align-items:center;gap:10px;width:100%;padding:8px 12px;background:transparent;border:none;color:#ccc;font-size:13px;font-family:inherit;cursor:pointer;border-radius:4px;text-align:left;";
+			btn.innerHTML = `<span style="color:${zone.borderColor};font-weight:700;min-width:20px;">${ZONE_KEYS[i] || ""}</span><span style="color:${zone.borderColor}">${zone.label}</span>`;
+			btn.addEventListener("mouseenter", () => { btn.style.background = "#252525"; });
+			btn.addEventListener("mouseleave", () => { btn.style.background = "transparent"; });
+			btn.addEventListener("click", () => {
+				closePalette();
+				executeCanvasRpc("jumpToZone", { zoneId: zone.id });
+			});
+			box.appendChild(btn);
+		});
+
+		overlay.appendChild(box);
+		document.body.appendChild(overlay);
+
+		const keyHandler = (e) => {
+			if (e.key === "Escape") { closePalette(); return; }
+			const idx = parseInt(e.key) - 1;
+			if (idx >= 0 && idx < zones.length) {
+				closePalette();
+				executeCanvasRpc("jumpToZone", { zoneId: zones[idx].id });
+			}
+		};
+		document.addEventListener("keydown", keyHandler);
+		overlay._keyHandler = keyHandler;
+	}
+
+	function openTileSearch() {
+		closePalette();
+		const overlay = document.createElement("div");
+		overlay.id = "palette-overlay";
+		overlay.style.cssText = "position:fixed;bottom:16px;right:16px;z-index:9999;";
+
+		const box = document.createElement("div");
+		box.style.cssText = "background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:8px;width:320px;box-shadow:0 8px 32px rgba(0,0,0,0.6);";
+
+		const input = document.createElement("input");
+		input.type = "text";
+		input.placeholder = "Search tiles by name...";
+		input.style.cssText = "width:100%;padding:10px 12px;background:#111;border:1px solid #333;border-radius:4px;color:#e0e0e0;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box;";
+		box.appendChild(input);
+
+		const resultsList = document.createElement("div");
+		resultsList.style.cssText = "max-height:300px;overflow-y:auto;margin-top:6px;";
+		box.appendChild(resultsList);
+
+		function renderResults(query) {
+			resultsList.innerHTML = "";
+			if (!query) return;
+			const { results: matches } = executeCanvasRpc("searchTiles", { query });
+			if (matches.length === 0) {
+				const empty = document.createElement("div");
+				empty.textContent = "No matches";
+				empty.style.cssText = "color:#555;font-size:12px;padding:8px 12px;";
+				resultsList.appendChild(empty);
+				return;
+			}
+			matches.forEach((m) => {
+				const btn = document.createElement("button");
+				const typeLabel = m.type === "term" ? "Terminal" : m.type;
+				btn.style.cssText = "display:flex;align-items:center;gap:10px;width:100%;padding:8px 12px;background:transparent;border:none;color:#ccc;font-size:13px;font-family:inherit;cursor:pointer;border-radius:4px;text-align:left;";
+				btn.innerHTML = `<span style="color:#888;font-size:10px;min-width:50px;">${typeLabel}</span><span>${m.title || "(untitled)"}</span>`;
+				btn.addEventListener("mouseenter", () => { btn.style.background = "#252525"; });
+				btn.addEventListener("mouseleave", () => { btn.style.background = "transparent"; });
+				btn.addEventListener("click", () => {
+					closePalette();
+					executeCanvasRpc("jumpToTile", { tileId: m.id });
+				});
+				resultsList.appendChild(btn);
+			});
+		}
+
+		input.addEventListener("input", () => renderResults(input.value.trim()));
+		input.addEventListener("keydown", (e) => {
+			if (e.key === "Escape") closePalette();
+			if (e.key === "Enter") {
+				const first = resultsList.querySelector("button");
+				if (first) first.click();
+			}
+		});
+
+		overlay.appendChild(box);
+		document.body.appendChild(overlay);
+		setTimeout(() => input.focus(), 50);
+
+		const keyHandler = (e) => { if (e.key === "Escape") closePalette(); };
+		document.addEventListener("keydown", keyHandler);
+		overlay._keyHandler = keyHandler;
+	}
+
+	// Expose globally for context menu
+	window.__openTileSearch = openTileSearch;
+	window.__openZoneJumpPalette = openZoneJumpPalette;
 
 	// -- beforeunload save --
 
@@ -3401,7 +3590,9 @@ init();
 		{ keys: "\u2318Z (pen mode)", desc: "Undo last stroke" },
 		{ keys: "\u2318D", desc: "Duplicate focused tile" },
 		{ keys: "\u23180", desc: "Reset zoom to 100%" },
-		{ keys: "\u2318K", desc: "Focus search" },
+		{ keys: "\u2318J", desc: "Jump to zone" },
+		{ keys: "\u2318K", desc: "Search tiles by name" },
+		{ keys: "1-7", desc: "Jump to zone (no selection)" },
 		{ keys: "\u2318\u21E7A", desc: "Auto-layout grid" },
 	];
 
@@ -3704,4 +3895,5 @@ init();
 
 	// Initial check
 	updateEmptyHint();
+
 })();
