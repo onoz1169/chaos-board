@@ -26,6 +26,27 @@ export function initConnectionLayer(canvasEl) {
 		const tileLayer = canvasEl.querySelector("#tile-layer");
 		canvasEl.insertBefore(svgLayer, tileLayer);
 	}
+
+	// Add arrowhead marker definition
+	let defs = svgLayer.querySelector("defs");
+	if (!defs) {
+		defs = document.createElementNS(SVG_NS, "defs");
+		const marker = document.createElementNS(SVG_NS, "marker");
+		marker.setAttribute("id", "conn-arrow");
+		marker.setAttribute("viewBox", "0 0 10 10");
+		marker.setAttribute("refX", "10");
+		marker.setAttribute("refY", "5");
+		marker.setAttribute("markerWidth", "8");
+		marker.setAttribute("markerHeight", "8");
+		marker.setAttribute("orient", "auto-start-reverse");
+		const arrowPath = document.createElementNS(SVG_NS, "path");
+		arrowPath.setAttribute("d", "M 0 0 L 10 5 L 0 10 z");
+		arrowPath.setAttribute("fill", "context-stroke");
+		marker.appendChild(arrowPath);
+		defs.appendChild(marker);
+		svgLayer.insertBefore(defs, svgLayer.firstChild);
+	}
+
 	return svgLayer;
 }
 
@@ -118,12 +139,14 @@ export function renderConnections(connections, tiles, panX, panY, zoom) {
 			path.setAttribute("stroke", conn.color);
 			path.setAttribute("stroke-width", "2");
 			path.setAttribute("fill", "none");
+			path.setAttribute("marker-end", "url(#conn-arrow)");
 			path.classList.add("connection-path");
 			svgLayer.appendChild(path);
 			pathElements.set(conn.id, path);
 		}
 
 		path.setAttribute("d", pathStr);
+		path.setAttribute("stroke", conn.color);
 	}
 
 	// Remove stale paths
@@ -144,7 +167,7 @@ export function renderConnections(connections, tiles, panX, panY, zoom) {
  * @param {(toTileId: string, toEdge: string) => void} onComplete
  * @param {() => void} onCancel
  */
-export function startConnectionDrag(fromTileId, fromEdge, startX, startY, onComplete, onCancel) {
+export function startConnectionDrag(fromTileId, fromEdge, startX, startY, canvasEl, onComplete, onCancel) {
 	if (!svgLayer) return;
 
 	tempPath = document.createElementNS(SVG_NS, "path");
@@ -170,9 +193,16 @@ export function startConnectionDrag(fromTileId, fromEdge, startX, startY, onComp
 		}
 	}
 
+	// Convert screen coords to panel-viewer relative
+	function toLocal(clientX, clientY) {
+		const rect = canvasEl.getBoundingClientRect();
+		return { x: clientX - rect.left, y: clientY - rect.top };
+	}
+
 	function onMove(e) {
 		if (!tempPath) return;
-		const d = buildBezierPath(startX, startY, e.clientX, e.clientY, fromEdge, "left");
+		const p = toLocal(e.clientX, e.clientY);
+		const d = buildBezierPath(startX, startY, p.x, p.y, fromEdge, "left");
 		tempPath.setAttribute("d", d);
 	}
 
@@ -186,13 +216,27 @@ export function startConnectionDrag(fromTileId, fromEdge, startX, startY, onComp
 			tempPath = null;
 		}
 
-		// Check if mouse is over a connection handle
-		const target = document.elementFromPoint(e.clientX, e.clientY);
-		if (target && target.classList.contains("tile-conn-handle")) {
-			const tileEl = target.closest(".canvas-tile");
+		// Find nearest connection handle within threshold (proximity-based, works with CSS transforms)
+		const SNAP_DIST = 30;
+		let bestHandle = null;
+		let bestDist = SNAP_DIST;
+		for (const h of allHandles) {
+			if (sourceTile && sourceTile.contains(h)) continue;
+			const rect = h.getBoundingClientRect();
+			const hx = rect.left + rect.width / 2;
+			const hy = rect.top + rect.height / 2;
+			const dist = Math.hypot(e.clientX - hx, e.clientY - hy);
+			if (dist < bestDist) {
+				bestDist = dist;
+				bestHandle = h;
+			}
+		}
+
+		if (bestHandle) {
+			const tileEl = bestHandle.closest(".canvas-tile");
 			if (tileEl) {
 				const toTileId = tileEl.dataset.tileId;
-				const toEdge = target.dataset.edge;
+				const toEdge = bestHandle.dataset.edge;
 				if (toTileId && toTileId !== fromTileId && toEdge) {
 					onComplete(toTileId, toEdge);
 					return;

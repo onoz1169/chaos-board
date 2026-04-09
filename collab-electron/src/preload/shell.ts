@@ -210,6 +210,9 @@ contextBridge.exposeInMainWorld("shellApi", {
     ipcRenderer.send("analytics:track-event", name, properties);
   },
 
+  saveClipboardImage: (fileName: string, buffer: ArrayBuffer): Promise<string> =>
+    ipcRenderer.invoke("canvas:save-clipboard-image", fileName, buffer),
+
   // Integrations
   getAgents: () =>
     ipcRenderer.invoke("integrations:get-agents"),

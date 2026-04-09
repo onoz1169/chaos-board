@@ -17,10 +17,10 @@ import {
 } from "./group-state.js";
 import { initGroupLayer, renderGroups } from "./group-renderer.js";
 import { initZoneLayer, repositionZones, getTilesInZone, getZoneAtPoint, flashZone, getZones, getZoneCenter, updateZoneSummaries } from "./zone-renderer.js";
-import { attachDrawing, restoreDrawing, clearDrawing } from "./draw-interactions.js";
-import { createDrawToolbar } from "./draw-toolbar.js";
 import { strokes as penStrokes, clearStrokes as clearPenStrokes, undoStroke, toJSON as penStrokesToJSON, fromJSON as penStrokesFromJSON } from "./pen-stroke-state.js";
 import { initPenOverlay, redraw as redrawPenOverlay, togglePenMode, isPenMode, setPenMode, setPenTool } from "./pen-overlay.js";
+import { connections, addConnection, removeConnection, getConnectionsForTile, toJSON as connectionsToJSON, fromJSON as connectionsFromJSON } from "./connection-state.js";
+import { initConnectionLayer, renderConnections, startConnectionDrag, cleanupConnectionLayer } from "./connection-renderer.js";
 
 // -- Dark mode --
 
@@ -57,7 +57,7 @@ const ZOOM_RUBBER_BAND_K = 400;
 const CANVAS_DBLCLICK_SUPPRESS_MS = 500;
 const CELL = 20;
 const MAJOR = 80;
-const CROSS_R = 4;
+
 
 let canvasX = 0;
 let canvasY = 0;
@@ -384,9 +384,6 @@ function setupResize(
 		e.preventDefault();
 		const startX = e.clientX;
 		const startWidth = panel.getBoundingClientRect().width;
-		const startCounterWidth =
-			counterpart.getBoundingClientRect().width;
-		const totalWidth = startWidth + startCounterWidth;
 		let prevClamped = startWidth;
 
 		handle.classList.add("active");
@@ -490,6 +487,68 @@ async function init() {
 	const tileLayer = document.getElementById("tile-layer");
 	const groupLayer = document.getElementById("group-layer");
 	initZoneLayer();
+	initConnectionLayer(canvasEl);
+
+	// Right-click on connection paths to delete or toggle style
+	{
+		const connLayer = document.getElementById("connection-layer");
+		if (connLayer) {
+			connLayer.addEventListener("contextmenu", (e) => {
+				const target = e.target;
+				if (!target || !target.classList.contains("connection-path")) return;
+				e.preventDefault();
+				e.stopPropagation();
+				const connId = target.dataset.connectionId;
+				if (!connId) return;
+
+				// Remove any existing connection context menu
+				const existing = document.getElementById("conn-context-menu");
+				if (existing) existing.remove();
+
+				const menu = document.createElement("div");
+				menu.id = "conn-context-menu";
+				menu.style.cssText = `position:fixed;left:${e.clientX}px;top:${e.clientY}px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 0;z-index:9999;min-width:140px;box-shadow:0 4px 12px rgba(0,0,0,0.3);font-size:12px;font-family:var(--font-mono);`;
+
+				const deleteItem = document.createElement("div");
+				deleteItem.textContent = "Delete connection";
+				deleteItem.style.cssText = "padding:6px 12px;cursor:pointer;color:var(--fg);";
+				deleteItem.addEventListener("mouseenter", () => { deleteItem.style.background = "var(--border)"; });
+				deleteItem.addEventListener("mouseleave", () => { deleteItem.style.background = ""; });
+				deleteItem.addEventListener("click", () => {
+					removeConnection(connId);
+					renderConnections(connections, tiles, canvasX, canvasY, canvasScale);
+					saveCanvasDebounced();
+					menu.remove();
+				});
+				menu.appendChild(deleteItem);
+
+				const conn = connections.find(c => c.id === connId);
+				if (conn) {
+					const toggleItem = document.createElement("div");
+					toggleItem.textContent = conn.lineStyle === "straight" ? "Curved line" : "Straight line";
+					toggleItem.style.cssText = "padding:6px 12px;cursor:pointer;color:var(--fg);";
+					toggleItem.addEventListener("mouseenter", () => { toggleItem.style.background = "var(--border)"; });
+					toggleItem.addEventListener("mouseleave", () => { toggleItem.style.background = ""; });
+					toggleItem.addEventListener("click", () => {
+						conn.lineStyle = conn.lineStyle === "straight" ? "bezier" : "straight";
+						renderConnections(connections, tiles, canvasX, canvasY, canvasScale);
+						saveCanvasDebounced();
+						menu.remove();
+					});
+					menu.appendChild(toggleItem);
+				}
+
+				document.body.appendChild(menu);
+				const dismiss = (ev) => {
+					if (!menu.contains(ev.target)) {
+						menu.remove();
+						document.removeEventListener("mousedown", dismiss);
+					}
+				};
+				setTimeout(() => document.addEventListener("mousedown", dismiss), 0);
+			});
+		}
+	}
 
 	// Long-press anywhere on canvas (including on tiles) to select all tiles in that zone
 	{
@@ -613,7 +672,9 @@ async function init() {
 				content: t.content,
 				noteColor: t.noteColor,
 				fontSize: t.fontSize,
-				imageData: t.imageData,
+				shapeType: t.shapeType,
+				shapeColor: t.shapeColor,
+				shapeBorder: t.shapeBorder,
 				zIndex: t.zIndex,
 			})),
 			viewport: {
@@ -623,6 +684,7 @@ async function init() {
 			},
 			groups: groupsToJSON(),
 			penStrokes: penStrokesToJSON(),
+			connections: connectionsToJSON(),
 		};
 	}
 
@@ -781,6 +843,7 @@ async function init() {
 		repositionZones(canvasX, canvasY, canvasScale);
 		renderGroups(groups, tiles, canvasX, canvasY, canvasScale);
 		updateZoneSummaries(tiles);
+		renderConnections(connections, tiles, canvasX, canvasY, canvasScale);
 	}
 
 	// ── Tile temperature visualization ──
@@ -1050,37 +1113,38 @@ async function init() {
 		}
 	}
 
-	function createDrawTile(cx, cy, imageData, extra = {}) {
-		const tile = createCanvasTile("draw", cx, cy, extra);
-		const dom = tileDOMs.get(tile.id);
-		if (!dom || !dom.drawCanvas || !dom.toolbarContainer) return tile;
-
-		const toolbar = createDrawToolbar(dom.toolbarContainer, {
-			onClear: () => {
-				clearDrawing(dom.drawCanvas);
-				tile.imageData = null;
-				saveCanvasDebounced();
-			},
-		});
-
-		attachDrawing(dom.drawCanvas, tile, {
-			getColor: toolbar.getColor,
-			getBrushSize: toolbar.getBrushSize,
-			getTool: toolbar.getTool,
-			onStrokeEnd: (dataURL) => {
-				tile.imageData = dataURL;
-				saveCanvasDebounced();
-			},
-		});
-
-		if (imageData) {
-			tile.imageData = imageData;
-			// Wait for canvas to be sized before restoring
-			requestAnimationFrame(() => restoreDrawing(dom.drawCanvas, imageData));
+	function createShapeTile(cx, cy, shapeType = "rect", shapeColor, shapeBorder, extra = {}) {
+		// Set sensible default dimensions per shape type
+		if (!extra.width && !extra.height) {
+			if (shapeType === "arrow-right") { extra.width = 200; extra.height = 100; }
+			else if (shapeType === "line") { extra.width = 240; extra.height = 30; }
 		}
-
+		const tile = createCanvasTile("shape", cx, cy, {
+			...extra,
+			shapeType,
+			shapeColor: shapeColor || "rgba(80,140,255,0.25)",
+			shapeBorder: shapeBorder || "rgba(80,140,255,0.8)",
+		});
+		const dom = tileDOMs.get(tile.id);
+		if (dom) {
+			dom.container.addEventListener("shape-change", () => saveCanvasDebounced());
+		}
 		saveCanvasImmediate();
 		return tile;
+	}
+
+	function getEdgeAnchorPos(tile, edge) {
+		const sx = tile.x * canvasScale + canvasX;
+		const sy = tile.y * canvasScale + canvasY;
+		const sw = tile.width * canvasScale;
+		const sh = tile.height * canvasScale;
+		switch (edge) {
+			case "top": return { x: sx + sw / 2, y: sy };
+			case "bottom": return { x: sx + sw / 2, y: sy + sh };
+			case "left": return { x: sx, y: sy + sh / 2 };
+			case "right": return { x: sx + sw, y: sy + sh / 2 };
+			default: return { x: sx + sw / 2, y: sy + sh / 2 };
+		}
 	}
 
 	function createCanvasTile(type, canvasXPos, canvasYPos, extra = {}) {
@@ -1173,6 +1237,25 @@ async function init() {
 			getAllWebviews,
 		);
 
+		// Wire connection handles
+		const connHandles = dom.container.querySelectorAll(".tile-conn-handle");
+		for (const handle of connHandles) {
+			handle.addEventListener("mousedown", (e) => {
+				e.stopPropagation();
+				e.preventDefault();
+				const edge = handle.dataset.edge;
+				const anchor = getEdgeAnchorPos(tile, edge);
+				startConnectionDrag(tile.id, edge, anchor.x, anchor.y, canvasEl,
+					(toTileId, toEdge) => {
+						addConnection({ fromTileId: tile.id, fromEdge: edge, toTileId, toEdge });
+						renderConnections(connections, tiles, canvasX, canvasY, canvasScale);
+						saveCanvasDebounced();
+					},
+					() => {}
+				);
+			});
+		}
+
 		tileLayer.appendChild(dom.container);
 		tileDOMs.set(tile.id, dom);
 		positionTile(dom.container, tile, canvasX, canvasY, canvasScale);
@@ -1227,7 +1310,7 @@ async function init() {
 
 		// Set initial content and wire up input handler
 		const textEl = dom.contentArea.querySelector(".sticky-text");
-		const FONT_SIZES = [10, 12, 14, 16, 20, 24, 32, 48];
+		const STICKY_FONT_SIZES = [10, 12, 14, 16, 20, 24, 32, 48];
 		if (textEl) {
 			textEl.textContent = content;
 			textEl.style.fontSize = fontSize + "px";
@@ -1240,10 +1323,10 @@ async function init() {
 				if (!e.ctrlKey && !e.metaKey) return;
 				e.preventDefault();
 				e.stopPropagation();
-				const idx = FONT_SIZES.indexOf(tile.fontSize || 14);
+				const idx = STICKY_FONT_SIZES.indexOf(tile.fontSize || 14);
 				const next = e.deltaY < 0
-					? FONT_SIZES[Math.min(idx + 1, FONT_SIZES.length - 1)]
-					: FONT_SIZES[Math.max(idx - 1, 0)];
+					? STICKY_FONT_SIZES[Math.min(idx + 1, STICKY_FONT_SIZES.length - 1)]
+					: STICKY_FONT_SIZES[Math.max(idx - 1, 0)];
 				tile.fontSize = next;
 				textEl.style.fontSize = next + "px";
 				saveCanvasDebounced();
@@ -1254,11 +1337,10 @@ async function init() {
 		const fontDownBtn = dom.container.querySelector(".sticky-font-down");
 		const fontUpBtn = dom.container.querySelector(".sticky-font-up");
 		const adjustFont = (dir) => {
-			const FONT_SIZES = [10, 12, 14, 16, 20, 24, 32, 48];
-			const idx = FONT_SIZES.indexOf(tile.fontSize || 14);
+			const idx = STICKY_FONT_SIZES.indexOf(tile.fontSize || 14);
 			const next = dir > 0
-				? FONT_SIZES[Math.min(idx + 1, FONT_SIZES.length - 1)]
-				: FONT_SIZES[Math.max(idx - 1, 0)];
+				? STICKY_FONT_SIZES[Math.min(idx + 1, STICKY_FONT_SIZES.length - 1)]
+				: STICKY_FONT_SIZES[Math.max(idx - 1, 0)];
 			tile.fontSize = next;
 			if (textEl) textEl.style.fontSize = next + "px";
 			saveCanvasDebounced();
@@ -1279,9 +1361,13 @@ async function init() {
 
 		deselectTile(id);
 		removeTileFromGroup(id);
+		for (const conn of getConnectionsForTile(id)) {
+			removeConnection(conn.id);
+		}
 		const tile = getTile(id);
 		if (tile) window.shellApi.trackEvent("tile_closed", { type: tile.type });
 		removeTile(id);
+		renderConnections(connections, tiles, canvasX, canvasY, canvasScale);
 		saveCanvasImmediate();
 	}
 
@@ -1296,7 +1382,15 @@ async function init() {
 		if (src.noteColor !== undefined) extra.noteColor = src.noteColor;
 		if (src.fontSize !== undefined) extra.fontSize = src.fontSize;
 		if (src.cwd !== undefined) extra.cwd = src.cwd;
-		const newTile = createCanvasTile(src.type, src.x + 30, src.y + 30, extra);
+		if (src.shapeType !== undefined) extra.shapeType = src.shapeType;
+		if (src.shapeColor !== undefined) extra.shapeColor = src.shapeColor;
+		if (src.shapeBorder !== undefined) extra.shapeBorder = src.shapeBorder;
+		let newTile;
+		if (src.type === "shape") {
+			newTile = createShapeTile(src.x + 30, src.y + 30, src.shapeType, src.shapeColor, src.shapeBorder, extra);
+		} else {
+			newTile = createCanvasTile(src.type, src.x + 30, src.y + 30, extra);
+		}
 		if (src.type === "term") {
 			spawnTerminalWebview(newTile, false);
 		} else if (src.type === "text") {
@@ -1304,12 +1398,6 @@ async function init() {
 			if (dom) {
 				const textEl = dom.contentArea.querySelector(".sticky-text");
 				if (textEl) textEl.textContent = src.content || "";
-			}
-		} else if (src.type === "draw" && src.imageData) {
-			const dom = tileDOMs.get(newTile.id);
-			if (dom && dom.drawCanvas) {
-				newTile.imageData = src.imageData;
-				requestAnimationFrame(() => restoreDrawing(dom.drawCanvas, src.imageData));
 			}
 		}
 		repositionAllTiles();
@@ -1334,8 +1422,6 @@ async function init() {
 			dom.webview.blur();
 		} catch { }
 	}
-
-
 
 	function focusCanvasTile(id, mouseEvent) {
 		const tile = getTile(id);
@@ -1417,21 +1503,8 @@ async function init() {
 			dom.contentArea.appendChild(wv);
 			dom.webview = wv;
 
-			wv.addEventListener("dom-ready", () => { });
 		}
 
-		saveCanvasImmediate();
-	}
-
-	function clearCanvas() {
-		const tileIds = tiles.map((t) => t.id);
-		for (const id of tileIds) {
-			closeCanvasTile(id);
-		}
-		canvasX = 0;
-		canvasY = 0;
-		canvasScale = 1;
-		updateCanvas();
 		saveCanvasImmediate();
 	}
 
@@ -1664,7 +1737,6 @@ async function init() {
 
 	updateEdgeIndicators();
 
-
 	// -- Double-click to create terminal tile --
 
 	canvasEl.addEventListener("dblclick", (e) => {
@@ -1778,7 +1850,13 @@ async function init() {
 			{ id: "new-text", label: "\uFF0B Text file" },
 			{ id: "new-sticky", label: "\uFF0B Sticky note" },
 			{ id: "new-browser", label: "\uFF0B Browser" },
-			{ id: "new-draw", label: "\uFF0B Draw" },
+			{ separator: true },
+			{ id: "new-shape-rect", label: "▭ Rectangle" },
+			{ id: "new-shape-circle", label: "○ Circle" },
+			{ id: "new-shape-diamond", label: "◇ Diamond" },
+			{ id: "new-shape-triangle", label: "△ Triangle" },
+			{ id: "new-shape-arrow", label: "→ Arrow" },
+			{ id: "new-shape-line", label: "─ Line" },
 		];
 		const selTiles = getSelectedTiles();
 		if (selTiles.length >= 2 || (selTiles.length > 0 && selTiles.some((t) => getGroupForTile(t.id)))) {
@@ -1815,8 +1893,9 @@ async function init() {
 			const tile = createCanvasTile("browser", cx, cy);
 			spawnBrowserWebview(tile, true);
 			saveCanvasImmediate();
-		} else if (selected === "new-draw") {
-			createDrawTile(cx, cy);
+		} else if (selected && selected.startsWith("new-shape-")) {
+			const SHAPE_MAP = { "new-shape-rect": "rect", "new-shape-circle": "circle", "new-shape-diamond": "diamond", "new-shape-triangle": "triangle", "new-shape-arrow": "arrow-right", "new-shape-line": "line" };
+			createShapeTile(cx, cy, SHAPE_MAP[selected] || "rect");
 		} else if (selected === "group-tiles") {
 			groupSelectedTiles();
 		} else if (selected === "ungroup-tiles") {
@@ -2207,16 +2286,13 @@ async function init() {
 					savedTile.noteColor || "#FFF3B0",
 					savedTile.fontSize || 14,
 				);
-			} else if (savedTile.type === "draw") {
-				createDrawTile(
+			} else if (savedTile.type === "shape") {
+				createShapeTile(
 					savedTile.x, savedTile.y,
-					savedTile.imageData || null,
-					{
-						id: savedTile.id,
-						width: savedTile.width,
-						height: savedTile.height,
-						zIndex: savedTile.zIndex,
-					},
+					savedTile.shapeType || "rect",
+					savedTile.shapeColor,
+					savedTile.shapeBorder,
+					{ id: savedTile.id, width: savedTile.width, height: savedTile.height, zIndex: savedTile.zIndex, content: savedTile.content },
 				);
 			} else if (savedTile.filePath) {
 				createFileTile(
@@ -2231,11 +2307,16 @@ async function init() {
 			renderGroups(groups, tiles, canvasX, canvasY, canvasScale);
 		}
 
-
 		// Restore pen strokes
 		if (savedState.penStrokes) {
 			penStrokesFromJSON(savedState.penStrokes);
 			redrawPenOverlay(canvasX, canvasY, canvasScale);
+		}
+
+		// Restore connections
+		if (savedState.connections) {
+			connectionsFromJSON(savedState.connections);
+			renderConnections(connections, tiles, canvasX, canvasY, canvasScale);
 		}
 	}
 
@@ -2616,7 +2697,7 @@ async function init() {
 	let clipboardTiles = [];
 	let pasteOffset = 0;
 
-	window.addEventListener("keydown", (e) => {
+	window.addEventListener("keydown", async (e) => {
 		const isMac = navigator.platform.toUpperCase().includes("MAC");
 		const mod = isMac ? e.metaKey : e.ctrlKey;
 		if (!mod) return;
@@ -2642,6 +2723,36 @@ async function init() {
 			return;
 		}
 
+		// Check for clipboard image data before tile paste
+		if (
+			e.key === "v" &&
+			(activeSurface === "canvas" || activeSurface === "canvas-tile")
+		) {
+			try {
+				const items = await navigator.clipboard.read();
+				for (const item of items) {
+					const imageType = item.types.find((t) => t.startsWith("image/"));
+					if (imageType) {
+						e.preventDefault();
+						const blob = await item.getType(imageType);
+						const buffer = await blob.arrayBuffer();
+						const ext = imageType === "image/jpeg" ? ".jpg" : ".png";
+						const fileName = `paste-${Date.now()}${ext}`;
+						const filePath = await window.shellApi.saveClipboardImage(fileName, buffer);
+						if (filePath) {
+							const { cx, cy } = getViewportCenter();
+							createFileTile("image", cx, cy, filePath);
+							repositionAllTiles();
+							saveCanvasDebounced();
+						}
+						return;
+					}
+				}
+			} catch (_) {
+				// Clipboard read failed or no image data – fall through to tile paste
+			}
+		}
+
 		if (
 			e.key === "v" &&
 			clipboardTiles.length > 0 &&
@@ -2663,34 +2774,17 @@ async function init() {
 				if (src.noteColor !== undefined) extra.noteColor = src.noteColor;
 				if (src.fontSize !== undefined) extra.fontSize = src.fontSize;
 				if (src.cwd !== undefined) extra.cwd = src.cwd;
-				const newTile = createCanvasTile(src.type, newX, newY, extra);
+				if (src.shapeType !== undefined) extra.shapeType = src.shapeType;
+				if (src.shapeColor !== undefined) extra.shapeColor = src.shapeColor;
+				if (src.shapeBorder !== undefined) extra.shapeBorder = src.shapeBorder;
+				let newTile;
+				if (src.type === "shape") {
+					newTile = createShapeTile(newX, newY, src.shapeType, src.shapeColor, src.shapeBorder, extra);
+				} else {
+					newTile = createCanvasTile(src.type, newX, newY, extra);
+				}
 				if (src.type === "term") {
 					spawnTerminalWebview(newTile, false);
-				}
-				else if (src.type === "draw") {
-					const dom = tileDOMs.get(newTile.id);
-					if (dom && dom.drawCanvas && dom.toolbarContainer) {
-						const toolbar = createDrawToolbar(dom.toolbarContainer, {
-							onClear: () => {
-								clearDrawing(dom.drawCanvas);
-								newTile.imageData = null;
-								saveCanvasDebounced();
-							},
-						});
-						attachDrawing(dom.drawCanvas, newTile, {
-							getColor: toolbar.getColor,
-							getBrushSize: toolbar.getBrushSize,
-							getTool: toolbar.getTool,
-							onStrokeEnd: (dataURL) => {
-								newTile.imageData = dataURL;
-								saveCanvasDebounced();
-							},
-						});
-						if (src.imageData) {
-							newTile.imageData = src.imageData;
-							requestAnimationFrame(() => restoreDrawing(dom.drawCanvas, src.imageData));
-						}
-					}
 				}
 				selectTile(newTile.id);
 			}
@@ -2733,7 +2827,6 @@ async function init() {
 			e.preventDefault();
 			const prevScale = canvasScale;
 			canvasScale = 1;
-			// Adjust pan to keep viewport center stable
 			const cw = canvasEl.clientWidth / 2;
 			const ch = canvasEl.clientHeight / 2;
 			const ratio = canvasScale / prevScale - 1;
@@ -2741,6 +2834,17 @@ async function init() {
 			canvasY -= (ch - canvasY) * ratio;
 			showZoomIndicator();
 			updateCanvas();
+			repositionAllTiles();
+			return;
+		}
+
+		// Cmd+= / Cmd+-: Zoom in/out (centered on viewport)
+		if (e.key === "=" || e.key === "+" || e.key === "-") {
+			e.preventDefault();
+			const cw = canvasEl.clientWidth / 2;
+			const ch = canvasEl.clientHeight / 2;
+			const delta = (e.key === "-") ? 120 : -120;
+			applyZoom(delta, cw, ch);
 			repositionAllTiles();
 			return;
 		}
@@ -3607,7 +3711,6 @@ init();
 		{ keys: "Delete / Backspace", desc: "Delete selected tiles" },
 		{ keys: "\u2318C", desc: "Copy selected tiles" },
 		{ keys: "\u2318V", desc: "Paste tiles" },
-		{ keys: "Right-click \u2192 Draw", desc: "New draw tile (freehand)" },
 		{ keys: "\u2318G", desc: "Group selected tiles" },
 		{ keys: "\u2318\u21E7G", desc: "Ungroup" },
 		{ keys: "\u2318\u21E7L", desc: "Launch All" },
@@ -3623,12 +3726,13 @@ init();
 		{ keys: "T", desc: "New terminal" },
 		{ keys: "N", desc: "New sticky note" },
 		{ keys: "W", desc: "New browser" },
-		{ keys: "D", desc: "New draw canvas" },
+		{ keys: "S", desc: "New shape" },
 		{ keys: "P", desc: "Toggle pen mode" },
 		{ keys: "B (pen mode)", desc: "Brush tool" },
 		{ keys: "E (pen mode)", desc: "Eraser tool" },
 		{ keys: "\u2318Z (pen mode)", desc: "Undo last stroke" },
 		{ keys: "\u2318D", desc: "Duplicate focused tile" },
+		{ keys: "\u2318+/\u2318-", desc: "Zoom in/out" },
 		{ keys: "\u23180", desc: "Reset zoom to 100%" },
 		{ keys: "\u2318J", desc: "Jump to zone" },
 		{ keys: "\u2318K", desc: "Search tiles by name" },
@@ -3701,17 +3805,6 @@ init();
 		canvasEl.classList.remove("pen-mode");
 	}
 
-	function updatePenModeUI(active) {
-		if (active) {
-			activatePenWithTool(activePenDockTool || "brush");
-		} else {
-			deactivatePen();
-		}
-	}
-
-	// Pen icon: click to activate, click again to deactivate
-	// (wired up below via unified dock tool management)
-
 	// Color swatches
 	for (const swatch of penDockExpand.querySelectorAll("[data-pen-color]")) {
 		swatch.addEventListener("mousedown", (e) => e.stopPropagation());
@@ -3756,7 +3849,7 @@ init();
 		terminal: document.getElementById("tool-terminal-btn"),
 		sticky:   document.getElementById("tool-sticky-btn"),
 		browser:  document.getElementById("tool-browser-btn"),
-		draw:     document.getElementById("tool-draw-btn"),
+		shape:    document.getElementById("tool-shape-btn"),
 	};
 
 	let activeDockTool = "pointer";
@@ -3791,7 +3884,7 @@ init();
 		}
 
 		// For creation tools, create tile at viewport center then revert to pointer
-		if (tool === "terminal" || tool === "sticky" || tool === "browser" || tool === "draw") {
+		if (tool === "terminal" || tool === "sticky" || tool === "browser" || tool === "shape") {
 			const { cx, cy } = getViewportCenter();
 			if (tool === "terminal") {
 				const ws = workspaces[activeIndex];
@@ -3805,8 +3898,8 @@ init();
 				const tile = createCanvasTile("browser", cx, cy);
 				spawnBrowserWebview(tile, true);
 				saveCanvasImmediate();
-			} else if (tool === "draw") {
-				createDrawTile(cx, cy);
+			} else if (tool === "shape") {
+				createShapeTile(cx, cy);
 			}
 			// Revert to pointer after creation
 			setTimeout(() => setActiveTool("pointer"), 200);
@@ -3859,7 +3952,7 @@ init();
 				focused.closest?.("webview")
 			);
 			if (!isEditing) {
-				const TOOL_KEYS = { v: "pointer", t: "terminal", n: "sticky", w: "browser", d: "draw" };
+				const TOOL_KEYS = { v: "pointer", t: "terminal", n: "sticky", w: "browser", s: "shape" };
 				if (TOOL_KEYS[e.key]) {
 					e.preventDefault();
 					setActiveTool(TOOL_KEYS[e.key]);
@@ -3868,8 +3961,8 @@ init();
 			}
 		}
 
-		// P key = pen mode, V key or Escape = select mode (exit pen)
-		if ((e.key === "p" || e.key === "v" || (e.key === "Escape" && isPenMode())) && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+		// P key = pen mode toggle, Escape = exit pen mode
+		if ((e.key === "p" || (e.key === "Escape" && isPenMode())) && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
 			const focused = document.activeElement;
 			const isEditing = focused && (
 				focused.isContentEditable ||
@@ -3879,11 +3972,11 @@ init();
 			);
 			if (!isEditing) {
 				e.preventDefault();
-				if (e.key === "v" || e.key === "Escape") {
+				if (e.key === "Escape") {
 					deactivatePen();
-				} else if (e.key === "p" && !isPenMode()) {
+				} else if (!isPenMode()) {
 					activatePenWithTool("brush");
-				} else if (e.key === "p" && isPenMode()) {
+				} else {
 					deactivatePen();
 				}
 				return;

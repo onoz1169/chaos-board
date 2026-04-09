@@ -1,5 +1,5 @@
 /**
- * @typedef {'term' | 'note' | 'code' | 'image' | 'graph' | 'browser' | 'text' | 'draw'} TileType
+ * @typedef {'term' | 'note' | 'code' | 'image' | 'graph' | 'browser' | 'text' | 'shape'} TileType
  *
  * @typedef {Object} Tile
  * @property {string} id
@@ -16,7 +16,9 @@
  * @property {string} [label] - Custom display name (for term tiles)
  * @property {string} [content] - Text content for sticky note tiles
  * @property {string} [noteColor] - Background color for sticky note tiles
- * @property {string} [imageData] - Base64 data URL for draw tiles
+ * @property {string} [shapeType] - Shape type for shape tiles (rect, circle, diamond, triangle, arrow-right, line)
+ * @property {string} [shapeColor] - Fill color for shape tiles
+ * @property {string} [shapeBorder] - Border color for shape tiles
  * @property {number} zIndex - Stacking order
  */
 
@@ -33,7 +35,7 @@ const DEFAULT_TILE_SIZES = {
 	graph: { width: 600, height: 500 },
 	browser: { width: 480, height: 640 },
 	text: { width: 200, height: 200 },
-	draw: { width: 400, height: 400 },
+	shape: { width: 160, height: 160 },
 };
 
 /** @param {TileType} type */

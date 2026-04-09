@@ -9,7 +9,164 @@
  */
 const STICKY_COLOR = "#2a2a2a";
 
+/** Appends the four connection handles (top/right/bottom/left) to a tile container. */
+function appendConnectionHandles(container) {
+  for (const edge of ["top", "right", "bottom", "left"]) {
+    const handle = document.createElement("div");
+    handle.className = "tile-conn-handle";
+    handle.dataset.edge = edge;
+    container.appendChild(handle);
+  }
+}
+
+/** Adds mouseenter/mouseleave hover class toggling to a tile container. */
+function addHoverListeners(container) {
+  container.addEventListener("mouseenter", () => container.classList.add("tile-hovered"));
+  container.addEventListener("mouseleave", () => container.classList.remove("tile-hovered"));
+}
+
+function buildShapeSVG(shapeType, fill, border) {
+  const sw = 2;
+  switch (shapeType) {
+    case "circle":
+      return `<svg viewBox="0 0 100 100" preserveAspectRatio="none"><ellipse cx="50" cy="50" rx="48" ry="48" fill="${fill}" stroke="${border}" stroke-width="${sw}"/></svg>`;
+    case "diamond":
+      return `<svg viewBox="0 0 100 100" preserveAspectRatio="none"><polygon points="50,2 98,50 50,98 2,50" fill="${fill}" stroke="${border}" stroke-width="${sw}"/></svg>`;
+    case "triangle":
+      return `<svg viewBox="0 0 100 100" preserveAspectRatio="none"><polygon points="50,4 96,96 4,96" fill="${fill}" stroke="${border}" stroke-width="${sw}"/></svg>`;
+    case "arrow-right":
+      return `<svg viewBox="0 0 100 60" preserveAspectRatio="none"><polygon points="0,15 70,15 70,0 100,30 70,60 70,45 0,45" fill="${fill}" stroke="${border}" stroke-width="${sw}"/></svg>`;
+    case "line":
+      return `<svg viewBox="0 0 100 20" preserveAspectRatio="none"><line x1="2" y1="10" x2="98" y2="10" stroke="${border}" stroke-width="3" stroke-linecap="round"/></svg>`;
+    case "rect":
+    default:
+      return `<svg viewBox="0 0 100 100" preserveAspectRatio="none"><rect x="1" y="1" width="98" height="98" rx="4" fill="${fill}" stroke="${border}" stroke-width="${sw}"/></svg>`;
+  }
+}
+
 export function createTileDOM(tile, callbacks) {
+  // -- Shape tile --
+  if (tile.type === "shape") {
+    const container = document.createElement("div");
+    container.className = "canvas-tile shape-tile";
+    container.dataset.tileId = tile.id;
+    container.dataset.tileType = "shape";
+    container.setAttribute("role", "region");
+
+    const svgWrap = document.createElement("div");
+    svgWrap.className = "shape-svg-wrap";
+    svgWrap.innerHTML = buildShapeSVG(tile.shapeType || "rect", tile.shapeColor || "rgba(80,140,255,0.25)", tile.shapeBorder || "rgba(80,140,255,0.8)");
+    container.appendChild(svgWrap);
+
+    // Thin toolbar shown on hover
+    const toolbar = document.createElement("div");
+    toolbar.className = "shape-toolbar";
+
+    const SHAPES = [
+      { id: "rect", label: "▭" },
+      { id: "circle", label: "○" },
+      { id: "diamond", label: "◇" },
+      { id: "triangle", label: "△" },
+      { id: "arrow-right", label: "→" },
+      { id: "line", label: "─" },
+    ];
+    for (const s of SHAPES) {
+      const btn = document.createElement("button");
+      btn.className = "shape-pick-btn" + (s.id === (tile.shapeType || "rect") ? " active" : "");
+      btn.textContent = s.label;
+      btn.title = s.id;
+      btn.addEventListener("mousedown", (e) => e.stopPropagation());
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        tile.shapeType = s.id;
+        svgWrap.innerHTML = buildShapeSVG(s.id, tile.shapeColor || "rgba(80,140,255,0.25)", tile.shapeBorder || "rgba(80,140,255,0.8)");
+        toolbar.querySelectorAll(".shape-pick-btn").forEach(b => b.classList.toggle("active", b.title === s.id));
+        container.dispatchEvent(new CustomEvent("shape-change", { bubbles: true }));
+      });
+      toolbar.appendChild(btn);
+    }
+
+    // Color swatches
+    const COLORS = [
+      { fill: "rgba(80,140,255,0.25)", border: "rgba(80,140,255,0.8)" },
+      { fill: "rgba(60,180,100,0.25)", border: "rgba(60,180,100,0.8)" },
+      { fill: "rgba(220,80,80,0.25)", border: "rgba(220,80,80,0.8)" },
+      { fill: "rgba(200,180,120,0.25)", border: "rgba(200,180,120,0.8)" },
+      { fill: "rgba(160,120,220,0.25)", border: "rgba(160,120,220,0.8)" },
+      { fill: "rgba(255,255,255,0.1)", border: "rgba(255,255,255,0.5)" },
+    ];
+    const sep = document.createElement("span");
+    sep.className = "shape-toolbar-sep";
+    toolbar.appendChild(sep);
+    for (const c of COLORS) {
+      const swatch = document.createElement("button");
+      swatch.className = "shape-color-btn";
+      swatch.style.background = c.border;
+      swatch.addEventListener("mousedown", (e) => e.stopPropagation());
+      swatch.addEventListener("click", (e) => {
+        e.stopPropagation();
+        tile.shapeColor = c.fill;
+        tile.shapeBorder = c.border;
+        svgWrap.innerHTML = buildShapeSVG(tile.shapeType || "rect", c.fill, c.border);
+        container.dispatchEvent(new CustomEvent("shape-change", { bubbles: true }));
+      });
+      toolbar.appendChild(swatch);
+    }
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "tile-action-btn tile-close-btn shape-close-btn";
+    closeBtn.innerHTML = "&times;";
+    closeBtn.title = "Close";
+    closeBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+    closeBtn.addEventListener("click", (e) => { e.stopPropagation(); callbacks.onClose(tile.id); });
+    toolbar.appendChild(closeBtn);
+
+    container.appendChild(toolbar);
+
+    // Editable text label inside the shape
+    const textEl = document.createElement("div");
+    textEl.className = "shape-text";
+    textEl.contentEditable = "true";
+    textEl.spellcheck = false;
+    textEl.dataset.placeholder = "...";
+    if (tile.content) textEl.textContent = tile.content;
+    textEl.addEventListener("mousedown", (e) => e.stopPropagation());
+    textEl.addEventListener("click", (e) => { e.stopPropagation(); textEl.focus(); });
+    textEl.addEventListener("focus", () => textEl.classList.add("editing"));
+    textEl.addEventListener("blur", () => textEl.classList.remove("editing"));
+    textEl.addEventListener("input", () => {
+      tile.content = textEl.textContent;
+      container.dispatchEvent(new CustomEvent("shape-change", { bubbles: true }));
+    });
+    container.appendChild(textEl);
+
+    const contentOverlay = document.createElement("div");
+    contentOverlay.className = "tile-content-overlay";
+    container.appendChild(contentOverlay);
+
+    addHoverListeners(container);
+
+    // Double-click to edit text (bypasses overlay)
+    container.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      contentOverlay.style.pointerEvents = "none";
+      textEl.focus();
+      const restore = () => {
+        contentOverlay.style.pointerEvents = "";
+        textEl.removeEventListener("blur", restore);
+      };
+      textEl.addEventListener("blur", restore);
+    });
+
+    appendConnectionHandles(container);
+
+    return {
+      container, titleBar: container, titleText: null,
+      contentArea: svgWrap, contentOverlay, closeBtn, textEl,
+      urlInput: undefined, navBack: undefined, navForward: undefined, navReload: undefined,
+    };
+  }
+
   // -- Sticky note tile --
   if (tile.type === "text") {
     const container = document.createElement("div");
@@ -90,8 +247,8 @@ export function createTileDOM(tile, callbacks) {
     container.appendChild(contentOverlay);
 
 
-    container.addEventListener("mouseenter", () => container.classList.add("tile-hovered"));
-    container.addEventListener("mouseleave", () => container.classList.remove("tile-hovered"));
+    addHoverListeners(container);
+    appendConnectionHandles(container);
 
     return {
       container,
@@ -104,77 +261,6 @@ export function createTileDOM(tile, callbacks) {
       navBack: undefined,
       navForward: undefined,
       navReload: undefined,
-    };
-  }
-
-  // -- Draw (freehand) tile --
-  if (tile.type === "draw") {
-    const container = document.createElement("div");
-    container.className = "canvas-tile draw-tile";
-    container.dataset.tileId = tile.id;
-    container.dataset.tileType = tile.type;
-    container.setAttribute("role", "region");
-
-    const titleBar = document.createElement("div");
-    titleBar.className = "tile-title-bar";
-
-    const titleText = document.createElement("span");
-    titleText.className = "tile-title-text";
-    titleText.textContent = tile.label || "Draw";
-
-    const btnGroup = document.createElement("div");
-    btnGroup.className = "tile-btn-group";
-
-    const closeBtn = document.createElement("button");
-    closeBtn.className = "tile-action-btn tile-close-btn";
-    closeBtn.innerHTML = "&times;";
-    closeBtn.title = "Close tile";
-    closeBtn.setAttribute("aria-label", "Close tile");
-    closeBtn.addEventListener("mousedown", (e) => e.stopPropagation());
-    closeBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      callbacks.onClose(tile.id);
-    });
-    btnGroup.appendChild(closeBtn);
-
-    titleBar.appendChild(titleText);
-    titleBar.appendChild(btnGroup);
-
-    const contentArea = document.createElement("div");
-    contentArea.className = "tile-content draw-content";
-
-    // Toolbar container (populated externally by draw-toolbar.js)
-    const toolbarContainer = document.createElement("div");
-    toolbarContainer.className = "draw-toolbar-container";
-    contentArea.appendChild(toolbarContainer);
-
-    // Drawing canvas element
-    const drawCanvas = document.createElement("canvas");
-    drawCanvas.className = "draw-canvas";
-    drawCanvas.style.width = "100%";
-    drawCanvas.style.height = "100%";
-    drawCanvas.style.display = "block";
-    drawCanvas.style.touchAction = "none"; // Required for Pointer Events
-    contentArea.appendChild(drawCanvas);
-
-    // Content overlay for drag behavior (above canvas when not drawing)
-    const contentOverlay = document.createElement("div");
-    contentOverlay.className = "tile-content-overlay";
-    contentOverlay.style.pointerEvents = "none"; // Drawing mode: let pointer events through to canvas
-    contentArea.appendChild(contentOverlay);
-
-    container.appendChild(titleBar);
-    container.appendChild(contentArea);
-
-
-    return {
-      container,
-      titleBar,
-      contentArea,
-      contentOverlay,
-      webview: null,
-      drawCanvas,
-      toolbarContainer,
     };
   }
 
@@ -429,13 +515,14 @@ export function createTileDOM(tile, callbacks) {
   container.appendChild(contentArea);
   contentArea.appendChild(contentOverlay);
 
-  container.addEventListener("mouseenter", () => container.classList.add("tile-hovered"));
-  container.addEventListener("mouseleave", () => container.classList.remove("tile-hovered"));
+  addHoverListeners(container);
+  appendConnectionHandles(container);
 
   return { container, titleBar, titleText, contentArea, contentOverlay, closeBtn, urlInput, navBack, navForward, navReload };
 }
 
 export function getTileLabel(tile) {
+  if (tile.type === "shape") return { parent: "", name: tile.shapeType || "rect" };
   if (tile.type === "term") return { parent: "", name: tile.label || "Terminal" };
   if (tile.type === "browser") {
     if (tile.url) {

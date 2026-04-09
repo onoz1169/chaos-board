@@ -227,7 +227,7 @@ export function repositionZones(panX, panY, zoom) {
  * @param {string} zoneId
  * @returns {{ x: number, y: number } | null}
  */
-const TYPE_LABELS = { term: "Term", note: "Note", text: "Text", draw: "Draw", browser: "Web" };
+const TYPE_LABELS = { term: "Term", note: "Note", text: "Text", browser: "Web", shape: "Shape" };
 
 export function updateZoneSummaries(tiles) {
 	for (const zone of ZONES) {
