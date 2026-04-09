@@ -23,10 +23,11 @@
 }
 
 .dark {
-	--bg: rgb(18, 18, 18);
-	--canvas-bg: rgb(24, 24, 24);
-	--canvas-bg-hi: rgb(38, 38, 38);
-	--canvas-bg-rgb: 24, 24, 24;
+	--bg: rgb(26, 28, 32);
+	--canvas-bg: rgb(30, 32, 36);
+	--canvas-bg-hi: rgb(40, 42, 48);
+	--canvas-bg-rgb: 30, 32, 36;
+	--canvas-opacity: 1;
 	--fg: rgb(220, 220, 220);
 	--border: rgba(255, 255, 255, 0.2);
 	--tile-border: rgba(255, 255, 255, 0.35);
@@ -212,7 +213,7 @@ body {
 #update-pill.is-downloading {
 	border-color: transparent;
 	background: transparent;
-	color: var(--muted, rgba(0, 0, 0, 0.5));
+	color: var(--muted);
 	cursor: default;
 	pointer-events: none;
 }
@@ -320,7 +321,7 @@ body {
 }
 
 .dropdown-item:hover {
-	background: var(--hover-bg, rgba(255,255,255,0.08));
+	background: color-mix(in srgb, var(--fg) 10%, transparent);
 }
 
 .dropdown-item.active {
@@ -479,7 +480,7 @@ body {
 #canvas-skill-modal {
 	position: relative;
 	width: min(420px, calc(100vw - 64px));
-	background: var(--background);
+	background: var(--bg);
 	border-radius: 12px;
 	padding: 24px;
 	box-shadow: 0 16px 48px rgba(0, 0, 0, 0.2);
@@ -490,12 +491,12 @@ body {
 	font-size: 16px;
 	font-weight: 600;
 	margin: 0 0 8px;
-	color: var(--foreground);
+	color: var(--fg);
 }
 
 #canvas-skill-modal p {
 	font-size: 13px;
-	color: var(--muted-foreground);
+	color: var(--muted);
 	margin: 0 0 16px;
 	line-height: 1.5;
 }
@@ -515,11 +516,11 @@ body {
 	border-radius: 8px;
 	border: 1px solid var(--border);
 	font-size: 13px;
-	color: var(--foreground);
+	color: var(--fg);
 }
 
 .canvas-skill-agent-row input[type="checkbox"] {
-	accent-color: var(--primary);
+	accent-color: var(--primary, #1d76dc);
 	width: 14px;
 	height: 14px;
 }
@@ -536,13 +537,13 @@ body {
 }
 
 .canvas-skill-agent-row .agent-badge.detected {
-	background: color-mix(in srgb, var(--primary) 15%, transparent);
-	color: var(--primary);
+	background: color-mix(in srgb, var(--primary, #1d76dc) 15%, transparent);
+	color: var(--primary, #1d76dc);
 }
 
 .canvas-skill-agent-row .agent-badge.not-found {
 	background: var(--muted);
-	color: var(--muted-foreground);
+	color: var(--bg);
 }
 
 #canvas-skill-actions {
@@ -556,22 +557,22 @@ body {
 	border-radius: 6px;
 	border: 1px solid var(--border);
 	background: transparent;
-	color: var(--muted-foreground);
+	color: var(--muted);
 	font-size: 13px;
 	cursor: pointer;
 }
 
 #canvas-skill-skip:hover {
-	color: var(--foreground);
-	border-color: var(--foreground);
+	color: var(--fg);
+	border-color: var(--fg);
 }
 
 #canvas-skill-install {
 	padding: 6px 16px;
 	border-radius: 6px;
 	border: none;
-	background: var(--primary);
-	color: var(--primary-foreground);
+	background: var(--primary, #1d76dc);
+	color: #fff;
 	font-size: 13px;
 	font-weight: 500;
 	cursor: pointer;
@@ -1390,8 +1391,8 @@ body {
 }
 
 .canvas-zone-summary {
-	font-size: 11px;
-	opacity: 0.6;
+	font-size: 12px;
+	opacity: 0.8;
 	margin-top: 2px;
 	letter-spacing: 1px;
 }
@@ -1402,18 +1403,19 @@ body {
 	bottom: 0;
 	left: 0;
 	right: 0;
-	height: 34.78%; /* W1H_STRIP_H / TOTAL_ZONE_H = 2400/6400 */
+	height: 37.5%; /* W1H_STRIP_H / TOTAL_ZONE_H = 2400/6400 */
 	display: flex;
 	flex-direction: column;
-	border-top: 1px dashed;
+	border-top: 1px dashed rgba(255, 255, 255, 0.35);
 	pointer-events: none;
 }
 
 .zone-5w1h-row {
 	flex: 1;
 	position: relative;
-	border-bottom: 1px dashed;
-	opacity: 0.5;
+	border-bottom: 1px dashed rgba(255, 255, 255, 0.3);
+	background: rgba(255, 255, 255, 0.03);
+	opacity: 0.75;
 }
 
 .zone-5w1h-row:last-child {
@@ -1424,13 +1426,13 @@ body {
 	position: absolute;
 	top: 8px;
 	left: 12px;
-	font-size: 14px;
+	font-size: 16px;
 	font-weight: 700;
 	letter-spacing: 0.15em;
 	font-family: var(--font-mono);
 	pointer-events: none;
 	user-select: none;
-	opacity: 0.8;
+	opacity: 1.0;
 }
 
 /* === Persistent Groups === */

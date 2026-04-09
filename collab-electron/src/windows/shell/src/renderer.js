@@ -2723,36 +2723,6 @@ async function init() {
 			return;
 		}
 
-		// Check for clipboard image data before tile paste
-		if (
-			e.key === "v" &&
-			(activeSurface === "canvas" || activeSurface === "canvas-tile")
-		) {
-			try {
-				const items = await navigator.clipboard.read();
-				for (const item of items) {
-					const imageType = item.types.find((t) => t.startsWith("image/"));
-					if (imageType) {
-						e.preventDefault();
-						const blob = await item.getType(imageType);
-						const buffer = await blob.arrayBuffer();
-						const ext = imageType === "image/jpeg" ? ".jpg" : ".png";
-						const fileName = `paste-${Date.now()}${ext}`;
-						const filePath = await window.shellApi.saveClipboardImage(fileName, buffer);
-						if (filePath) {
-							const { cx, cy } = getViewportCenter();
-							createFileTile("image", cx, cy, filePath);
-							repositionAllTiles();
-							saveCanvasDebounced();
-						}
-						return;
-					}
-				}
-			} catch (_) {
-				// Clipboard read failed or no image data – fall through to tile paste
-			}
-		}
-
 		if (
 			e.key === "v" &&
 			clipboardTiles.length > 0 &&

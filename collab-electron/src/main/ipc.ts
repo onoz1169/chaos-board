@@ -1,5 +1,6 @@
 import {
   app,
+  clipboard,
   ipcMain,
   dialog,
   Menu,
@@ -684,6 +685,17 @@ export function registerIpcHandlers(config: AppConfig): void {
       return join(dir, saved);
     },
   );
+  ipcMain.handle("canvas:read-clipboard-image", async () => {
+    const img = clipboard.readImage();
+    if (img.isEmpty()) return null;
+    const png = img.toPNG();
+    // Copy into a dedicated ArrayBuffer for safe IPC transfer.
+    // Buffer.buffer may reference a larger pooled ArrayBuffer, so we
+    // slice to get an exact-sized copy.
+    const ab = png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength);
+    return { data: ab, format: "image/png" };
+  });
+
   ipcMain.handle(
     "import:web-article",
     async (_event, url: string, targetDir: string) => {

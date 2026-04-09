@@ -21,7 +21,6 @@ The app is early-stage and in active development. macOS only for now.
 - **Shape tiles** (S key / right-click) — rectangle, circle, diamond, triangle, arrow, line with inline text editing, color picker, and resize
 - **Connectors** — drag from tile edge handles to create bezier curves with arrowheads between any tiles; right-click to delete or toggle straight/bezier
 - **Sticky notes** (N key) — text tiles with font size controls
-- **Image paste** — Cmd+V to paste clipboard images directly onto the canvas
 - **Pen/draw mode** (P key) — freehand drawing overlay with pressure-sensitive brush and eraser
 - **Marquee select + delete** — Shift+drag in eraser mode to select and delete pen strokes
 
@@ -87,7 +86,7 @@ All data is stored locally on disk (`~/.collaborator/`). No accounts required.
 | Shape | S / right-click | Geometric shapes with text (rect, circle, diamond, triangle, arrow, line) |
 | Note | drag .md file | Rich markdown editor |
 | Code | drag file | Syntax-highlighted code editor |
-| Image | drag image / Cmd+V | Image display |
+| Image | drag image | Image display |
 
 ## Canvas Zones
 

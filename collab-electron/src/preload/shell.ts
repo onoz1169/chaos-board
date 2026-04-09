@@ -213,6 +213,9 @@ contextBridge.exposeInMainWorld("shellApi", {
   saveClipboardImage: (fileName: string, buffer: ArrayBuffer): Promise<string> =>
     ipcRenderer.invoke("canvas:save-clipboard-image", fileName, buffer),
 
+  readClipboardImage: (): Promise<{ data: ArrayBuffer; format: string } | null> =>
+    ipcRenderer.invoke("canvas:read-clipboard-image"),
+
   // Integrations
   getAgents: () =>
     ipcRenderer.invoke("integrations:get-agents"),
