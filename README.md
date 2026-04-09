@@ -11,9 +11,8 @@ The app is early-stage and in active development. macOS only for now.
 ## What chaos-board adds to Collaborator
 
 ### Spatial Organization
-- **7 canvas zones** — STIMULUS / WILL / SUPPLY (work), REFLECT (shared), PLAY / LEARN / LIFE (life) — color-coded areas that give spatial meaning to where you place tiles
+- **5 canvas zones** — INTELLIGENCE / HUNT / FORGE / REST / REFLECT — a Monster Hunter-inspired loop: gather intel, execute work, build better tools, recover, reflect
 - **Zone summaries** — each zone displays a live count of contained tiles by type
-- **REFLECT date lines** — horizontal time markers in the center zone for temporal awareness
 - **Tile temperature** — recently active tiles glow subtly, giving visual pulse to your workspace
 - **Jump to zone** (Cmd+J) — quick navigation with auto-zoom to fit the zone in view
 - **Search tiles** (Cmd+K / right-click) — find and jump to any tile by name
@@ -32,7 +31,8 @@ The app is early-stage and in active development. macOS only for now.
 - **Auto-layout** (Cmd+Shift+A) — batch tile arrangement
 - **Tile groups** (Cmd+G / Cmd+Shift+G) — group and ungroup tiles
 - **Zoom shortcuts** — Cmd+=/- to zoom, Cmd+0 to reset, pinch-to-zoom on trackpad
-- **Zone keys** (1-7) — jump directly to any zone
+- **5W1H strip** — each zone has WHY/WHAT/WHO/WHERE/WHEN/HOW cells at the bottom for grounding work in fundamentals
+- **Zone keys** (1-5) — jump directly to any zone
 - **Terminal naming** — double-click title to rename terminal sessions
 - **Keyboard shortcuts modal** (?) — full shortcut reference
 
@@ -75,7 +75,7 @@ All data is stored locally on disk (`~/.collaborator/`). No accounts required.
 3. Double-click the canvas to create a terminal, and start an agent
 4. Right-click the canvas to add shapes, sticky notes, browsers, or more terminals
 5. Drag from tile edges to connect tiles with arrows
-6. Press P to draw, S to add shapes, 1-7 to jump between zones
+6. Press P to draw, S to add shapes, 1-5 to jump between zones
 
 ## Tile Types
 
@@ -91,20 +91,39 @@ All data is stored locally on disk (`~/.collaborator/`). No accounts required.
 
 ## Canvas Zones
 
+Inspired by the Monster Hunter loop — scout, hunt, forge, rest, reflect, repeat.
+
 ```
-┌──────────┐ ┌──────────┐ ┌──────────┐
-│ STIMULUS │ │   WILL   │ │  SUPPLY  │   Work
-│  (blue)  │ │ (green)  │ │  (red)   │
-└──────────┘ └──────────┘ └──────────┘
-             ┌──────────┐
-             │ REFLECT  │              Shared
-             │  (gold)  │
-             └──────────┘
-┌──────────┐ ┌──────────┐ ┌──────────┐
-│   PLAY   │ │  LEARN   │ │   LIFE   │   Life
-│ (orange) │ │ (purple) │ │  (pink)  │
-└──────────┘ └──────────┘ └──────────┘
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│ INTELLIGENCE │ │     HUNT     │ │    FORGE     │ │     REST     │ │   REFLECT    │
+│    (blue)    │ │    (red)     │ │   (green)    │ │    (gold)    │ │   (purple)   │
+│              │ │              │ │              │ │              │ │              │
+│  Gather info │ │  Execute     │ │  Build tools │ │  Recover     │ │  Look back   │
+│  Scout       │ │  Earn        │ │  Optimize    │ │  Play, learn │ │  Improve     │
+│              │ │              │ │              │ │              │ │              │
+│ ┌──────────┐ │ (same strip in each zone)                                       │
+│ │   WHY    │ │                                                                 │
+│ ├──────────┤ │                                                                 │
+│ │   WHAT   │ │                                                                 │
+│ ├──────────┤ │                                                                 │
+│ │   WHO    │ │                                                                 │
+│ ├──────────┤ │                                                                 │
+│ │  WHERE   │ │                                                                 │
+│ ├──────────┤ │                                                                 │
+│ │   WHEN   │ │                                                                 │
+│ ├──────────┤ │                                                                 │
+│ │   HOW    │ │                                                                 │
+│ └──────────┘ │                                                                 │
+└──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘
+
+INTELLIGENCE → HUNT → FORGE → REST → REFLECT → INTELLIGENCE ...
 ```
+
+Each zone has two areas:
+- **Workspace** (top) — main area for placing terminals, shapes, sticky notes, and other tiles
+- **5W1H strip** (bottom) — six labeled cells (Why / What / Who / Where / When / How) for grounding each zone's work in fundamentals
+
+The 5W1H strip prevents losing sight of the big picture while deep in task execution. Place sticky notes in each cell to maintain awareness of purpose, scope, stakeholders, context, timing, and method.
 
 Zones provide spatial meaning without imposing structure. Place tiles freely — the zones are guides, not containers.
 

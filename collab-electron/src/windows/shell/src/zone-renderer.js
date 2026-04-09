@@ -3,98 +3,80 @@
  *
  * Draws persistent background zones that visually partition the canvas.
  *
- * Work zones:    STIMULUS / WILL / SUPPLY (top row)
- * Shared zone:   REFLECT (center, bridges work and life)
- * Life zones:    PLAY / LEARN / LIFE (bottom row)
+ * INTELLIGENCE → HUNT → FORGE → REST → REFLECT
+ *   諜報          狩      鍛治     回復    内省
+ *
+ * Each zone has a main workspace area on top and a 5W1H strip at the bottom:
+ *   WHY | WHAT | WHO | WHERE | WHEN | HOW
  */
 
 const ZONE_W = 4200;
 const ZONE_GAP = 500;
-const WORK_H = 3000;
-const REFLECT_H = 2000;
-const LIFE_H = 3000;
+const ZONE_H = 4000;
+const W1H_ROW_H = 400; // height of each 5W1H row
+const W1H_STRIP_H = W1H_ROW_H * 6; // 6 rows stacked vertically
+const TOTAL_ZONE_H = ZONE_H + W1H_STRIP_H;
 
 const COL0 = 40;
 const COL1 = COL0 + ZONE_W + ZONE_GAP;
 const COL2 = COL1 + ZONE_W + ZONE_GAP;
+const COL3 = COL2 + ZONE_W + ZONE_GAP;
+const COL4 = COL3 + ZONE_W + ZONE_GAP;
 
-const ROW_WORK = 40;
-const ROW_REFLECT = ROW_WORK + WORK_H + ZONE_GAP;
-const ROW_LIFE = ROW_REFLECT + REFLECT_H + ZONE_GAP;
+const ROW = 40;
+
+const W1H_LABELS = ["WHY", "WHAT", "WHO", "WHERE", "WHEN", "HOW"];
 
 const ZONES = [
-	// ── Work (top row) ──
 	{
-		id: "zone-stimulus",
-		label: "STIMULUS",
+		id: "zone-intelligence",
+		label: "INTELLIGENCE",
 		color: "rgba(80,140,255,0.12)",
 		borderColor: "rgba(80,140,255,0.7)",
 		x: COL0,
-		y: ROW_WORK,
+		y: ROW,
 		width: ZONE_W,
-		height: WORK_H,
+		height: TOTAL_ZONE_H,
 	},
 	{
-		id: "zone-will",
-		label: "WILL",
-		color: "rgba(60,180,100,0.12)",
-		borderColor: "rgba(60,180,100,0.7)",
-		x: COL1,
-		y: ROW_WORK,
-		width: ZONE_W,
-		height: WORK_H,
-	},
-	{
-		id: "zone-supply",
-		label: "SUPPLY",
+		id: "zone-hunt",
+		label: "HUNT",
 		color: "rgba(220,80,80,0.12)",
 		borderColor: "rgba(220,80,80,0.7)",
-		x: COL2,
-		y: ROW_WORK,
+		x: COL1,
+		y: ROW,
 		width: ZONE_W,
-		height: WORK_H,
+		height: TOTAL_ZONE_H,
 	},
-	// ── Shared (center) ──
+	{
+		id: "zone-forge",
+		label: "FORGE",
+		color: "rgba(60,180,100,0.12)",
+		borderColor: "rgba(60,180,100,0.7)",
+		x: COL2,
+		y: ROW,
+		width: ZONE_W,
+		height: TOTAL_ZONE_H,
+	},
+	{
+		id: "zone-rest",
+		label: "REST",
+		color: "rgba(200,180,120,0.12)",
+		borderColor: "rgba(200,180,120,0.7)",
+		x: COL3,
+		y: ROW,
+		width: ZONE_W,
+		height: TOTAL_ZONE_H,
+	},
 	{
 		id: "zone-reflect",
 		label: "REFLECT",
-		color: "rgba(200,180,120,0.12)",
-		borderColor: "rgba(200,180,120,0.7)",
-		x: COL1,
-		y: ROW_REFLECT,
+		color: "rgba(160,120,200,0.12)",
+		borderColor: "rgba(160,120,200,0.7)",
+		x: COL4,
+		y: ROW,
 		width: ZONE_W,
-		height: REFLECT_H,
-	},
-	// ── Life (bottom row) ──
-	{
-		id: "zone-play",
-		label: "PLAY",
-		color: "rgba(255,150,50,0.12)",
-		borderColor: "rgba(255,150,50,0.7)",
-		x: COL0,
-		y: ROW_LIFE,
-		width: ZONE_W,
-		height: LIFE_H,
-	},
-	{
-		id: "zone-learn",
-		label: "LEARN",
-		color: "rgba(160,120,220,0.12)",
-		borderColor: "rgba(160,120,220,0.7)",
-		x: COL1,
-		y: ROW_LIFE,
-		width: ZONE_W,
-		height: LIFE_H,
-	},
-	{
-		id: "zone-life",
-		label: "LIFE",
-		color: "rgba(220,100,160,0.12)",
-		borderColor: "rgba(220,100,160,0.7)",
-		x: COL2,
-		y: ROW_LIFE,
-		width: ZONE_W,
-		height: LIFE_H,
+		height: TOTAL_ZONE_H,
 	},
 ];
 
@@ -187,24 +169,28 @@ export function initZoneLayer() {
 		el.appendChild(summary);
 		summaryDOMs.set(zone.id, summary);
 
+		// 5W1H strip at the bottom — 6 rows stacked vertically
+		const strip = document.createElement("div");
+		strip.className = "zone-5w1h-strip";
+		strip.style.borderTopColor = zone.borderColor;
+
+		for (const q of W1H_LABELS) {
+			const row = document.createElement("div");
+			row.className = "zone-5w1h-row";
+			row.style.borderColor = zone.borderColor;
+
+			const rowLabel = document.createElement("div");
+			rowLabel.className = "zone-5w1h-label";
+			rowLabel.textContent = q;
+			rowLabel.style.color = zone.borderColor;
+			row.appendChild(rowLabel);
+
+			strip.appendChild(row);
+		}
+		el.appendChild(strip);
+
 		layerEl.appendChild(el);
 		zoneDOMs.set(zone.id, el);
-
-		// Add date lines to REFLECT zone
-		if (zone.id === "zone-reflect") {
-			for (let i = 0; i < 7; i++) {
-				const d = new Date(); d.setDate(d.getDate() - i);
-				const dateStr = d.toLocaleDateString("ja-JP", { month: "numeric", day: "numeric", weekday: "short" });
-				const opacity = 0.5 - i * 0.06;
-				const line = document.createElement("div");
-				line.style.cssText = `position:absolute;width:100%;height:1px;background:rgba(200,180,120,${opacity});top:${(i + 1) * (REFLECT_H / 8)}px;pointer-events:none;`;
-				const lbl = document.createElement("span");
-				lbl.textContent = dateStr;
-				lbl.style.cssText = `position:absolute;left:8px;top:-14px;font-size:10px;color:rgba(200,180,120,${opacity});white-space:nowrap;`;
-				line.appendChild(lbl);
-				el.appendChild(line);
-			}
-		}
 	}
 }
 
@@ -222,25 +208,31 @@ export function repositionZones(panX, panY, zoom) {
 	}
 }
 
-/**
- * Get the center point of a zone (in canvas coordinates).
- * @param {string} zoneId
- * @returns {{ x: number, y: number } | null}
- */
+/** @type {Record<string, string>} */
 const TYPE_LABELS = { term: "Term", note: "Note", text: "Text", browser: "Web", shape: "Shape" };
 
+/**
+ * Update zone summary labels with tile-type counts.
+ * @param {Array<{ id: string, type: string, x: number, y: number, width: number, height: number }>} tiles
+ */
 export function updateZoneSummaries(tiles) {
 	for (const zone of ZONES) {
-		const ids = getTilesInZone(zone.id, tiles);
-		const matched = tiles.filter((t) => ids.includes(t.id));
+		const ids = new Set(getTilesInZone(zone.id, tiles));
 		const counts = {};
-		for (const t of matched) counts[t.type] = (counts[t.type] || 0) + 1;
+		for (const t of tiles) {
+			if (ids.has(t.id)) counts[t.type] = (counts[t.type] || 0) + 1;
+		}
 		const parts = Object.entries(counts).map(([k, v]) => `${TYPE_LABELS[k] || k} ${v}`);
 		const el = summaryDOMs.get(zone.id);
 		if (el) el.textContent = parts.length ? parts.join(" / ") : "Empty";
 	}
 }
 
+/**
+ * Get the center point of a zone (in canvas coordinates).
+ * @param {string} zoneId
+ * @returns {{ x: number, y: number } | null}
+ */
 export function getZoneCenter(zoneId) {
 	const zone = ZONES.find((z) => z.id === zoneId);
 	if (!zone) return null;

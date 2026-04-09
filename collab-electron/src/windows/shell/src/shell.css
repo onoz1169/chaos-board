@@ -1396,6 +1396,43 @@ body {
 	letter-spacing: 1px;
 }
 
+/* 5W1H strip at bottom of each zone — 6 rows stacked vertically */
+.zone-5w1h-strip {
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	height: 34.78%; /* W1H_STRIP_H / TOTAL_ZONE_H = 2400/6400 */
+	display: flex;
+	flex-direction: column;
+	border-top: 1px dashed;
+	pointer-events: none;
+}
+
+.zone-5w1h-row {
+	flex: 1;
+	position: relative;
+	border-bottom: 1px dashed;
+	opacity: 0.5;
+}
+
+.zone-5w1h-row:last-child {
+	border-bottom: none;
+}
+
+.zone-5w1h-label {
+	position: absolute;
+	top: 8px;
+	left: 12px;
+	font-size: 14px;
+	font-weight: 700;
+	letter-spacing: 0.15em;
+	font-family: var(--font-mono);
+	pointer-events: none;
+	user-select: none;
+	opacity: 0.8;
+}
+
 /* === Persistent Groups === */
 
 #group-layer {

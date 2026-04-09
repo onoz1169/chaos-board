@@ -2633,9 +2633,9 @@ async function init() {
 			return;
 		}
 
-		// 1-7: Jump to zone (no input focused)
+		// 1-5: Jump to zone (no input focused)
 		if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey
-			&& e.key >= "1" && e.key <= "7"
+			&& e.key >= "1" && e.key <= "5"
 			&& document.activeElement?.tagName !== "INPUT"
 			&& document.activeElement?.tagName !== "TEXTAREA") {
 			const zones = getZones();
@@ -3432,7 +3432,7 @@ async function init() {
 		title.style.cssText = "font-size:11px;color:#666;padding:4px 8px 8px;letter-spacing:2px;";
 		box.appendChild(title);
 
-		const ZONE_KEYS = ["1","2","3","4","5","6","7"];
+		const ZONE_KEYS = ["1","2","3","4","5"];
 		zones.forEach((zone, i) => {
 			const btn = document.createElement("button");
 			btn.style.cssText = "display:flex;align-items:center;gap:10px;width:100%;padding:8px 12px;background:transparent;border:none;color:#ccc;font-size:13px;font-family:inherit;cursor:pointer;border-radius:4px;text-align:left;";
@@ -3736,7 +3736,7 @@ init();
 		{ keys: "\u23180", desc: "Reset zoom to 100%" },
 		{ keys: "\u2318J", desc: "Jump to zone" },
 		{ keys: "\u2318K", desc: "Search tiles by name" },
-		{ keys: "1-7", desc: "Jump to zone (no selection)" },
+		{ keys: "1-5", desc: "Jump to zone (no selection)" },
 		{ keys: "\u2318\u21E7A", desc: "Auto-layout grid" },
 	];
 
