@@ -1,6 +1,6 @@
 # chaos-board
 
-An infinite canvas workspace for building with AI agents — forked from [Collaborator](https://github.com/collaborator-ai/collab-public) and extended with spatial organization, drawing tools, and Miro-inspired canvas features.
+概念をゾーンで管理し、カオスをボードで管理する — 無限キャンバス上でAIエージェントと共に働くワークスペース。[Collaborator](https://github.com/collaborator-ai/collab-public) をベースに、空間的な意味づけ、描画ツール、Miro風キャンバス機能を拡張。
 
 > **Origin:** This project is an enhanced fork of [Collaborator](https://github.com/collaborator-ai/collab-public) (`@collaborator/electron`). Collaborator provides the core architecture — Electron shell, multi-webview terminal system, file tree navigator, and canvas tile engine. chaos-board builds on top of that foundation with zone-based spatial organization, shape/connector tools, pen drawing, and workflow features described below.
 
