@@ -643,7 +643,9 @@ async function init() {
 
 	function saveCanvasImmediate() {
 		clearTimeout(saveTimer);
-		window.shellApi.canvasSaveState(getCanvasStateForSave());
+		window.shellApi.canvasSaveState(getCanvasStateForSave()).catch(err => {
+			console.error("Immediate canvas save failed:", err);
+		});
 	}
 
 	// -- Workspace data --
@@ -2528,12 +2530,11 @@ async function init() {
 			return;
 		}
 
-		// 1-7: Jump to zone (when no tile selected, no input focused)
+		// 1-7: Jump to zone (no input focused)
 		if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey
 			&& e.key >= "1" && e.key <= "7"
 			&& document.activeElement?.tagName !== "INPUT"
-			&& document.activeElement?.tagName !== "TEXTAREA"
-			&& getSelectedTiles().length === 0) {
+			&& document.activeElement?.tagName !== "TEXTAREA") {
 			const zones = getZones();
 			const idx = parseInt(e.key) - 1;
 			if (idx < zones.length) {
@@ -3159,22 +3160,12 @@ async function init() {
 						const tileH = tile.height || 300;
 						tile.x = startX + col * (tileW + gap);
 						tile.y = startY + row * (tileH + gap);
-						const dom = tileDOMs.get(tile.id);
-						if (dom) {
-							dom.container.style.left = tile.x + "px";
-							dom.container.style.top = tile.y + "px";
-						}
 					});
 				} else if (algorithm === "horizontal") {
 					let curX = startX;
 					targetTiles.forEach((tile) => {
 						tile.x = curX;
 						tile.y = startY;
-						const dom = tileDOMs.get(tile.id);
-						if (dom) {
-							dom.container.style.left = tile.x + "px";
-							dom.container.style.top = tile.y + "px";
-						}
 						curX += (tile.width || 400) + gap;
 					});
 				} else if (algorithm === "vertical") {
@@ -3182,15 +3173,11 @@ async function init() {
 					targetTiles.forEach((tile) => {
 						tile.x = startX;
 						tile.y = curY;
-						const dom = tileDOMs.get(tile.id);
-						if (dom) {
-							dom.container.style.left = tile.x + "px";
-							dom.container.style.top = tile.y + "px";
-						}
 						curY += (tile.height || 300) + gap;
 					});
 				}
 
+				repositionAllTiles();
 				saveCanvasImmediate();
 				return { moved: targetTiles.length, algorithm };
 			}
@@ -3367,8 +3354,21 @@ async function init() {
 		resultsList.style.cssText = "max-height:300px;overflow-y:auto;margin-top:6px;";
 		box.appendChild(resultsList);
 
+		let selectedIndex = -1;
+
+		function updateHighlight() {
+			const buttons = resultsList.querySelectorAll("button");
+			buttons.forEach((btn, i) => {
+				btn.style.background = i === selectedIndex ? "#333" : "transparent";
+			});
+			if (selectedIndex >= 0 && buttons[selectedIndex]) {
+				buttons[selectedIndex].scrollIntoView({ block: "nearest" });
+			}
+		}
+
 		function renderResults(query) {
 			resultsList.innerHTML = "";
+			selectedIndex = -1;
 			if (!query) return;
 			const { results: matches } = executeCanvasRpc("searchTiles", { query });
 			if (matches.length === 0) {
@@ -3378,13 +3378,13 @@ async function init() {
 				resultsList.appendChild(empty);
 				return;
 			}
-			matches.forEach((m) => {
+			matches.forEach((m, i) => {
 				const btn = document.createElement("button");
 				const typeLabel = m.type === "term" ? "Terminal" : m.type;
 				btn.style.cssText = "display:flex;align-items:center;gap:10px;width:100%;padding:8px 12px;background:transparent;border:none;color:#ccc;font-size:13px;font-family:inherit;cursor:pointer;border-radius:4px;text-align:left;";
 				btn.innerHTML = `<span style="color:#888;font-size:10px;min-width:50px;">${typeLabel}</span><span>${m.title || "(untitled)"}</span>`;
-				btn.addEventListener("mouseenter", () => { btn.style.background = "#252525"; });
-				btn.addEventListener("mouseleave", () => { btn.style.background = "transparent"; });
+				btn.addEventListener("mouseenter", () => { selectedIndex = i; updateHighlight(); });
+				btn.addEventListener("mouseleave", () => { selectedIndex = -1; updateHighlight(); });
 				btn.addEventListener("click", () => {
 					closePalette();
 					executeCanvasRpc("jumpToTile", { tileId: m.id });
@@ -3395,10 +3395,28 @@ async function init() {
 
 		input.addEventListener("input", () => renderResults(input.value.trim()));
 		input.addEventListener("keydown", (e) => {
+			const buttons = resultsList.querySelectorAll("button");
 			if (e.key === "Escape") closePalette();
+			if (e.key === "ArrowDown") {
+				e.preventDefault();
+				if (buttons.length > 0) {
+					selectedIndex = selectedIndex < buttons.length - 1 ? selectedIndex + 1 : 0;
+					updateHighlight();
+				}
+			}
+			if (e.key === "ArrowUp") {
+				e.preventDefault();
+				if (buttons.length > 0) {
+					selectedIndex = selectedIndex > 0 ? selectedIndex - 1 : buttons.length - 1;
+					updateHighlight();
+				}
+			}
 			if (e.key === "Enter") {
-				const first = resultsList.querySelector("button");
-				if (first) first.click();
+				if (selectedIndex >= 0 && buttons[selectedIndex]) {
+					buttons[selectedIndex].click();
+				} else if (buttons.length > 0) {
+					buttons[0].click();
+				}
 			}
 		});
 
@@ -3785,7 +3803,7 @@ init();
 	if (layoutBtn) {
 		layoutBtn.addEventListener("mousedown", (e) => e.stopPropagation());
 		layoutBtn.addEventListener("click", () => {
-			executeCanvasRpc("canvas.autoLayout", { algorithm: "grid", options: { columns: 3 } });
+			executeCanvasRpc("autoLayout", { algorithm: "grid", options: { columns: 3 } });
 		});
 	}
 
