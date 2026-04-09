@@ -104,6 +104,9 @@ let layerEl = null;
 /** @type {Map<string, HTMLDivElement>} */
 const zoneDOMs = new Map();
 
+/** @type {Map<string, HTMLDivElement>} */
+const summaryDOMs = new Map();
+
 export function getZones() {
 	return ZONES;
 }
@@ -177,8 +180,31 @@ export function initZoneLayer() {
 		label.style.color = zone.borderColor;
 		el.appendChild(label);
 
+		const summary = document.createElement("div");
+		summary.className = "canvas-zone-summary";
+		summary.style.color = zone.borderColor;
+		summary.textContent = "Empty";
+		el.appendChild(summary);
+		summaryDOMs.set(zone.id, summary);
+
 		layerEl.appendChild(el);
 		zoneDOMs.set(zone.id, el);
+
+		// Add date lines to REFLECT zone
+		if (zone.id === "zone-reflect") {
+			for (let i = 0; i < 7; i++) {
+				const d = new Date(); d.setDate(d.getDate() - i);
+				const dateStr = d.toLocaleDateString("ja-JP", { month: "numeric", day: "numeric", weekday: "short" });
+				const opacity = 0.5 - i * 0.06;
+				const line = document.createElement("div");
+				line.style.cssText = `position:absolute;width:100%;height:1px;background:rgba(200,180,120,${opacity});top:${(i + 1) * (REFLECT_H / 8)}px;pointer-events:none;`;
+				const lbl = document.createElement("span");
+				lbl.textContent = dateStr;
+				lbl.style.cssText = `position:absolute;left:8px;top:-14px;font-size:10px;color:rgba(200,180,120,${opacity});white-space:nowrap;`;
+				line.appendChild(lbl);
+				el.appendChild(line);
+			}
+		}
 	}
 }
 
@@ -201,6 +227,20 @@ export function repositionZones(panX, panY, zoom) {
  * @param {string} zoneId
  * @returns {{ x: number, y: number } | null}
  */
+const TYPE_LABELS = { term: "Term", note: "Note", text: "Text", draw: "Draw", browser: "Web" };
+
+export function updateZoneSummaries(tiles) {
+	for (const zone of ZONES) {
+		const ids = getTilesInZone(zone.id, tiles);
+		const matched = tiles.filter((t) => ids.includes(t.id));
+		const counts = {};
+		for (const t of matched) counts[t.type] = (counts[t.type] || 0) + 1;
+		const parts = Object.entries(counts).map(([k, v]) => `${TYPE_LABELS[k] || k} ${v}`);
+		const el = summaryDOMs.get(zone.id);
+		if (el) el.textContent = parts.length ? parts.join(" / ") : "Empty";
+	}
+}
+
 export function getZoneCenter(zoneId) {
 	const zone = ZONES.find((z) => z.id === zoneId);
 	if (!zone) return null;

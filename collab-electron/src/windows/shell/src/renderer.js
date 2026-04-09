@@ -16,7 +16,7 @@ import {
 	fromJSON as groupsFromJSON,
 } from "./group-state.js";
 import { initGroupLayer, renderGroups } from "./group-renderer.js";
-import { initZoneLayer, repositionZones, getTilesInZone, getZoneAtPoint, flashZone, getZones, getZoneCenter } from "./zone-renderer.js";
+import { initZoneLayer, repositionZones, getTilesInZone, getZoneAtPoint, flashZone, getZones, getZoneCenter, updateZoneSummaries } from "./zone-renderer.js";
 import { attachDrawing, restoreDrawing, clearDrawing } from "./draw-interactions.js";
 import { createDrawToolbar } from "./draw-toolbar.js";
 import { strokes as penStrokes, clearStrokes as clearPenStrokes, undoStroke, toJSON as penStrokesToJSON, fromJSON as penStrokesFromJSON } from "./pen-stroke-state.js";
@@ -780,7 +780,27 @@ async function init() {
 		}
 		repositionZones(canvasX, canvasY, canvasScale);
 		renderGroups(groups, tiles, canvasX, canvasY, canvasScale);
+		updateZoneSummaries(tiles);
 	}
+
+	// ── Tile temperature visualization ──
+	function updateTileTemperatures() {
+		const now = Date.now();
+		for (const tile of tiles) {
+			const dom = tileDOMs.get(tile.id);
+			if (!dom) continue;
+			const lastActive = tile._lastInteraction || now;
+			const hoursAgo = (now - lastActive) / 3.6e6;
+			let opacity = 0;
+			if (hoursAgo < 1) opacity = 0.8;
+			else if (hoursAgo < 24) opacity = 0.4;
+			else if (hoursAgo < 168) opacity = 0.15;
+			dom.container.style.boxShadow = opacity
+				? `0 0 8px rgba(100,200,255,${opacity})`
+				: "none";
+		}
+	}
+	setInterval(updateTileTemperatures, 60000);
 
 	function spawnTerminalWebview(tile, autoFocus = false) {
 		const dom = tileDOMs.get(tile.id);
@@ -1179,6 +1199,7 @@ async function init() {
 				duplicateTile(tile);
 			} else if (selected === "bring-to-front") {
 				bringToFront(tile);
+				tile._lastInteraction = Date.now();
 				positionTile(dom.container, tile, canvasX, canvasY, canvasScale);
 				saveCanvasDebounced();
 			} else if (selected === "delete") {
@@ -1320,6 +1341,7 @@ async function init() {
 		const tile = getTile(id);
 		if (tile) {
 			bringToFront(tile);
+			tile._lastInteraction = Date.now();
 			repositionAllTiles();
 		}
 		const dom = tileDOMs.get(id);

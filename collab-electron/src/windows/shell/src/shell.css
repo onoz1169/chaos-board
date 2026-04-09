@@ -1389,6 +1389,13 @@ body {
 	text-shadow: 0 0 12px currentColor;
 }
 
+.canvas-zone-summary {
+	font-size: 11px;
+	opacity: 0.6;
+	margin-top: 2px;
+	letter-spacing: 1px;
+}
+
 /* === Persistent Groups === */
 
 #group-layer {
