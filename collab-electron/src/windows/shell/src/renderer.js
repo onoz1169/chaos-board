@@ -564,14 +564,23 @@ async function init() {
 
 	// Kanban state (must be declared early — used by getCanvasStateForSave)
 	// card: { id, title, due, priority: "high"|"mid"|"low"|"", notes }
-	/** @type {{ columns: Array<{ id: string, title: string, cards: Array<any> }>, archived: Array<any> }} */
+	/** @type {{ columns: Array<{ id: string, title: string, cards: Array<any> }>, archived: Array<any>, mode?: string }} */
 	let kanbanState = {
 		columns: [
 			{ id: "col-todo", title: "Todo", cards: [] },
 			{ id: "col-doing", title: "Doing", cards: [] },
 		],
 		archived: [],
+		mode: "free", // "free" | "zone"
 	};
+
+	const ZONE_COLUMNS = [
+		{ id: "zone-intelligence", title: "INTELLIGENCE", color: "rgba(80,140,255,0.9)" },
+		{ id: "zone-hunt", title: "HUNT", color: "rgba(220,80,80,0.9)" },
+		{ id: "zone-forge", title: "FORGE", color: "rgba(60,180,100,0.9)" },
+		{ id: "zone-rest", title: "REST", color: "rgba(200,180,120,0.9)" },
+		{ id: "zone-reflect", title: "REFLECT", color: "rgba(160,120,200,0.9)" },
+	];
 
 	// DOM elements
 	const panelNav = document.getElementById("panel-nav");
@@ -1039,6 +1048,8 @@ async function init() {
 						statusDot.title = "Error";
 					}
 				}
+				// Update linked kanban card status
+				updateKanbanCardStatus(tile.id, exitCode === 0 || exitCode === undefined ? "done" : "error");
 			}
 		});
 	}
@@ -1697,7 +1708,7 @@ async function init() {
 		return { x: ix, y: iy };
 	}
 
-	function panToTile(tile) {
+	function panToTile(tile, fitToView = false) {
 		if (panAnimRaf) {
 			cancelAnimationFrame(panAnimRaf);
 			panAnimRaf = null;
@@ -1705,12 +1716,24 @@ async function init() {
 
 		const vw = canvasEl.clientWidth;
 		const vh = canvasEl.clientHeight;
-		const targetX = vw / 2 - (tile.x + tile.width / 2) * canvasScale;
-		const targetY = vh / 2 - (tile.y + tile.height / 2) * canvasScale;
+
+		// Calculate target zoom: fit tile with padding so content is readable
+		let targetScale = canvasScale;
+		if (fitToView) {
+			const pad = 80; // px padding around tile
+			const scaleX = (vw - pad * 2) / tile.width;
+			const scaleY = (vh - pad * 2) / tile.height;
+			targetScale = Math.min(scaleX, scaleY, 1); // cap at 100%
+			targetScale = Math.max(targetScale, 0.33);  // floor at 33%
+		}
+
+		const targetX = vw / 2 - (tile.x + tile.width / 2) * targetScale;
+		const targetY = vh / 2 - (tile.y + tile.height / 2) * targetScale;
 		const startX = canvasX;
 		const startY = canvasY;
+		const startScale = canvasScale;
 		const startTime = performance.now();
-		const DURATION = 350;
+		const DURATION = 400;
 
 		function easeOut(t) {
 			return 1 - Math.pow(1 - t, 3);
@@ -1722,7 +1745,11 @@ async function init() {
 			const e = easeOut(t);
 			canvasX = startX + (targetX - startX) * e;
 			canvasY = startY + (targetY - startY) * e;
+			if (fitToView) {
+				canvasScale = startScale + (targetScale - startScale) * e;
+			}
 			updateCanvas();
+			repositionAllTiles();
 
 			if (t < 1) {
 				panAnimRaf = requestAnimationFrame(step);
@@ -2920,6 +2947,7 @@ async function init() {
 	// -- Selection keyboard handlers --
 
 	window.addEventListener("keydown", (e) => {
+		if (isScratchpadOpen) return;
 		// Cmd+G = group selected tiles
 		if (e.key === "g" && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
 			if (getSelectedTiles().length >= 2) {
@@ -3010,6 +3038,7 @@ async function init() {
 	let pasteOffset = 0;
 
 	window.addEventListener("keydown", async (e) => {
+		if (isScratchpadOpen) return;
 		const isMac = navigator.platform.toUpperCase().includes("MAC");
 		const mod = isMac ? e.metaKey : e.ctrlKey;
 		if (!mod) return;
@@ -3081,6 +3110,7 @@ async function init() {
 	// -- Cmd+0: Reset zoom to 100% --
 
 	window.addEventListener("keydown", (e) => {
+		if (isScratchpadOpen) return;
 		const isMac = navigator.platform.toUpperCase().includes("MAC");
 		const mod = isMac ? e.metaKey : e.ctrlKey;
 		if (!mod) return;
@@ -3166,6 +3196,7 @@ async function init() {
 	let suppressCanvasDblClickUntil = 0;
 
 	window.addEventListener("keydown", (e) => {
+		if (isScratchpadOpen) return;
 		if (e.code === "Space" && !e.target.closest?.("webview")) {
 			// Don't intercept space when typing in an input or contenteditable
 			const focused = document.activeElement;
@@ -4100,15 +4131,14 @@ async function init() {
 	function openScratchpad() {
 		if (!scratchpadOverlay) return;
 		isScratchpadOpen = true;
+		scratchpadOverlay.style.display = "";
 		scratchpadOverlay.classList.add("visible");
-		// Ensure today's entry exists
-		const today = todayKey();
-		if (!spCurrentKey || !spEntries[spCurrentKey]) {
-			if (!spEntries[today]) spEntries[today] = { content: "", drawing: "" };
-			loadEntry(today);
+		// Load memo content into editor
+		if (scratchpadEditor && spMemo.content) {
+			scratchpadEditor.innerHTML = spMemo.content;
 		}
 		setScratchpadTool(scratchpadTool);
-		renderEntryList();
+		updateWordCount();
 		setTimeout(() => {
 			resizeScratchpadCanvas();
 			if (scratchpadTool === "text") scratchpadEditor?.focus();
@@ -4118,8 +4148,9 @@ async function init() {
 	function closeScratchpad() {
 		if (!scratchpadOverlay) return;
 		isScratchpadOpen = false;
-		saveCurrentEntry();
+		saveMemo();
 		scratchpadOverlay.classList.remove("visible");
+		scratchpadOverlay.style.display = "none";
 		saveCanvasDebounced();
 	}
 
@@ -4145,9 +4176,12 @@ async function init() {
 		});
 	}
 
-	// Keyboard: M to toggle memo, Escape to close
+	// Block all canvas shortcuts while scratchpad is open.
+	// Only ESC and M (to close) are allowed through.
 	window.addEventListener("keydown", (e) => {
-		if (e.key === "Escape" && isScratchpadOpen) {
+		if (!isScratchpadOpen) return;
+
+		if (e.key === "Escape") {
 			e.preventDefault();
 			e.stopPropagation();
 			closeScratchpad();
@@ -4155,11 +4189,38 @@ async function init() {
 		}
 
 		if ((e.key === "m" || e.key === "M") && !e.metaKey && !e.ctrlKey && !e.altKey) {
-			if (isScratchpadOpen) {
+			const focused = document.activeElement;
+			const isEditing = focused && (
+				focused.isContentEditable ||
+				focused.tagName === "INPUT" ||
+				focused.tagName === "TEXTAREA"
+			);
+			if (!isEditing) {
 				e.preventDefault();
+				e.stopPropagation();
 				closeScratchpad();
 				return;
 			}
+		}
+
+		// Let normal typing through inside the scratchpad, but stop
+		// single-key shortcuts (T, N, V, S, W, P, 1-5, Space, etc.)
+		// from reaching canvas handlers.
+		const focused = document.activeElement;
+		const isTyping = focused && (
+			focused.isContentEditable ||
+			focused.tagName === "INPUT" ||
+			focused.tagName === "TEXTAREA"
+		);
+		if (!isTyping && !e.metaKey && !e.ctrlKey) {
+			e.stopPropagation();
+		}
+	}, true);
+
+	// M key to open memo (only when scratchpad is closed)
+	window.addEventListener("keydown", (e) => {
+		if (isScratchpadOpen) return;
+		if ((e.key === "m" || e.key === "M") && !e.metaKey && !e.ctrlKey && !e.altKey) {
 			const focused = document.activeElement;
 			const isEditing = focused && (
 				focused.isContentEditable ||
@@ -4179,7 +4240,12 @@ async function init() {
 	const kanbanBoardEl = document.getElementById("kanban-board");
 
 	function getKanbanStateForSave() {
-		return kanbanState;
+		return {
+			columns: kanbanState.columns,
+			archived: kanbanState.archived,
+			mode: kanbanState.mode || "free",
+			zoneColumns: kanbanState.zoneColumns || null,
+		};
 	}
 
 	function normalizeCard(raw) {
@@ -4189,6 +4255,9 @@ async function init() {
 			due: (raw && raw.due) || "",
 			priority: (raw && raw.priority) || "",
 			notes: (raw && raw.notes) || "",
+			ai: (raw && raw.ai) || false,
+			tileId: (raw && raw.tileId) || null,
+			status: (raw && raw.status) || null,
 		};
 	}
 
@@ -4221,9 +4290,22 @@ async function init() {
 					);
 				}
 				const savedArchived = Array.isArray(saved.archived) ? saved.archived.map(normalizeCard) : [];
+
+				// Restore zone columns if present
+				let zoneColumns = null;
+				if (saved.zoneColumns && Array.isArray(saved.zoneColumns)) {
+					zoneColumns = saved.zoneColumns.map((zc) => ({
+						id: zc.id,
+						title: zc.title || "Untitled",
+						cards: Array.isArray(zc.cards) ? zc.cards.map(normalizeCard) : [],
+					}));
+				}
+
 				kanbanState = {
 					columns: activeCols,
 					archived: [...savedArchived, ...archivedFromDone],
+					mode: saved.mode || "free",
+					zoneColumns,
 				};
 			}
 			renderKanban();
@@ -4292,7 +4374,8 @@ async function init() {
 	}
 
 	function findCard(cardId) {
-		for (const col of kanbanState.columns) {
+		const allCols = getActiveColumns();
+		for (const col of allCols) {
 			const card = col.cards.find((c) => c.id === cardId);
 			if (card) return { col, card };
 		}
@@ -4356,11 +4439,30 @@ async function init() {
 		}
 		if (!displayText) displayText = "(empty)";
 
+		const titleRow = document.createElement("div");
+		titleRow.className = "kanban-card-title-row";
+
 		const titleEl = document.createElement("div");
 		titleEl.className = "kanban-card-title";
 		if (isTitleFallback) titleEl.classList.add("kanban-card-title-fallback");
 		titleEl.textContent = displayText;
-		cardEl.appendChild(titleEl);
+		titleRow.appendChild(titleEl);
+
+		const deleteBtn = document.createElement("button");
+		deleteBtn.className = "kanban-card-delete";
+		deleteBtn.type = "button";
+		deleteBtn.title = "Delete";
+		deleteBtn.innerHTML = "&times;";
+		deleteBtn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			const col = kanbanState.columns.find((c) => c.cards.some((cd) => cd.id === card.id));
+			if (col) col.cards = col.cards.filter((c) => c.id !== card.id);
+			renderKanban();
+			saveCanvasDebounced();
+		});
+		titleRow.appendChild(deleteBtn);
+
+		cardEl.appendChild(titleRow);
 
 		// Show meta row if there's a due date, or if notes exist AND aren't already the title fallback
 		const showDue = !!card.due && !!card.title;
@@ -4383,8 +4485,29 @@ async function init() {
 				notesIcon.title = "Has notes";
 				meta.appendChild(notesIcon);
 			}
+			if (card.ai) {
+				const badge = createStatusBadge(card);
+				meta.appendChild(badge);
+			}
 			cardEl.appendChild(meta);
 		}
+		// Show status badge even without other meta
+		if (card.ai && !(showDue || showNotesIcon)) {
+			const meta = document.createElement("div");
+			meta.className = "kanban-card-meta";
+			const badge = createStatusBadge(card);
+			meta.appendChild(badge);
+			cardEl.appendChild(meta);
+		}
+	}
+
+	function createStatusBadge(card) {
+		const badge = document.createElement("span");
+		const status = card.status || (card.tileId ? "running" : "idle");
+		badge.className = "kanban-status-badge kanban-status-" + status;
+		const labels = { idle: "AI", running: "Running", done: "Done", error: "Error" };
+		badge.textContent = labels[status] || "AI";
+		return badge;
 	}
 
 	function renderCardExpanded(cardEl, card, col) {
@@ -4463,6 +4586,14 @@ async function init() {
 		cancelBtn.textContent = "Cancel";
 		actions.appendChild(cancelBtn);
 
+		// Run button — launches Claude Code with this task
+		const runBtn = document.createElement("button");
+		runBtn.type = "button";
+		runBtn.className = "kanban-run-btn";
+		runBtn.textContent = card.tileId ? "Jump" : "\u25B6 Run";
+		runBtn.title = card.tileId ? "Pan to the running terminal" : "Launch Claude Code with this task";
+		actions.appendChild(runBtn);
+
 		form.appendChild(actions);
 		cardEl.appendChild(form);
 
@@ -4473,7 +4604,6 @@ async function init() {
 			const newNotes = notesArea.value;
 			const hasAny = !!(newTitle || newDue || newPrio || newNotes.trim());
 			if (!hasAny) {
-				// All fields empty — remove card
 				col.cards = col.cards.filter((c) => c.id !== card.id);
 			} else {
 				card.title = newTitle;
@@ -4491,6 +4621,7 @@ async function init() {
 				// Was a new empty card — remove it
 				col.cards = col.cards.filter((c) => c.id !== card.id);
 			}
+			expandedCardId = null;
 			renderKanban();
 		}
 
@@ -4503,9 +4634,30 @@ async function init() {
 			cancel();
 		});
 
+		runBtn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			// Save current edits first
+			card.title = titleInput.value.trim();
+			card.notes = notesArea.value;
+			card.due = dueInput.value || "";
+			card.priority = currentPrio;
+			if (card.tileId) {
+				// Already launched — jump to it
+				const t = getTile(card.tileId);
+				if (t) { closeScratchpad(); panToTile(t, true); }
+			} else if (card.title || card.notes) {
+				card.ai = true;
+				expandedCardId = null;
+				launchClaudeForCard(card, col);
+				renderKanban();
+				saveCanvasDebounced();
+			}
+		});
+
 		cardEl.addEventListener("keydown", (e) => {
 			if (e.key === "Escape") {
 				e.preventDefault();
+				e.stopPropagation();
 				cancel();
 			} else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
 				e.preventDefault();
@@ -4518,28 +4670,191 @@ async function init() {
 
 	let expandedCardId = null;
 
+	/** Launch Claude Code in a terminal tile for a kanban card */
+	function launchClaudeForCard(card, col) {
+		// Build prompt from card content
+		let prompt = `task name: ${card.title}`;
+		if (card.notes) prompt += `\ntask description: ${card.notes}`;
+		if (card.priority) prompt += `\npriority: ${card.priority}`;
+		if (card.due) prompt += `\ndue: ${card.due}`;
+		if (!prompt.trim()) return;
+
+		// Find zone position for the terminal
+		const zoneData = getZones().find((z) => z.id === col.id);
+		const pos = zoneData
+			? findOpenSpotInZone(zoneData)
+			: { x: 100, y: 100 };
+
+		// Get current workspace CWD
+		const cwd = (workspaces[activeIndex] && workspaces[activeIndex].path) || undefined;
+
+		// Create terminal tile
+		const tile = createCanvasTile("term", pos.x, pos.y, {
+			label: card.title || "AI Task",
+			cwd,
+		});
+		spawnTerminalWebview(tile, false);
+
+		// Link card to tile and set running status
+		card.tileId = tile.id;
+		card.status = "running";
+
+		// Close memo and pan to the tile
+		closeScratchpad();
+		setTimeout(() => panToTile(tile, true), 200);
+
+		// Wait for PTY session to be ready, then:
+		// 1. Launch claude in interactive mode
+		// 2. Wait for it to start up
+		// 3. Send the task as input
+		const checkInterval = setInterval(() => {
+			if (tile.ptySessionId) {
+				clearInterval(checkInterval);
+				// Step 1: Launch Claude Code in YOLO mode
+				window.shellApi.ptyWrite(tile.ptySessionId, "claude --dangerously-skip-permissions\n");
+				// Step 2: Wait for Claude to initialize, then send the task + Enter
+				setTimeout(() => {
+					// Type the prompt text first, then press Enter to submit
+					window.shellApi.ptyWrite(tile.ptySessionId, prompt);
+					setTimeout(() => {
+						window.shellApi.ptyWrite(tile.ptySessionId, "\r");
+					}, 100);
+				}, 3000);
+			}
+		}, 200);
+		// Safety timeout — stop checking after 10s
+		setTimeout(() => clearInterval(checkInterval), 10000);
+
+		saveCanvasDebounced();
+	}
+
+	/** Update kanban card status when its linked terminal exits */
+	function updateKanbanCardStatus(tileId, status) {
+		const allCols = [...kanbanState.columns, ...(kanbanState.zoneColumns || [])];
+		for (const col of allCols) {
+			for (const card of col.cards) {
+				if (card.tileId === tileId) {
+					card.status = status;
+					renderKanban();
+					saveCanvasDebounced();
+					return;
+				}
+			}
+		}
+	}
+
+	/** Find an open spot in a zone for placing a new tile */
+	function findOpenSpotInZone(zone) {
+		const COLS = 4;
+		const tileW = 500, tileH = 400, pad = 40;
+		const existing = tiles.filter((t) => {
+			const cx = t.x + t.width / 2;
+			const cy = t.y + t.height / 2;
+			return cx >= zone.x && cx <= zone.x + zone.width
+				&& cy >= zone.y && cy <= zone.y + ZONE_H;
+		});
+		for (let row = 0; row < 10; row++) {
+			for (let c = 0; c < COLS; c++) {
+				const x = zone.x + pad + c * (tileW + pad);
+				const y = zone.y + 80 + row * (tileH + pad);
+				const overlaps = existing.some((t) =>
+					x < t.x + t.width && x + tileW > t.x &&
+					y < t.y + t.height && y + tileH > t.y
+				);
+				if (!overlaps) return { x, y };
+			}
+		}
+		return { x: zone.x + pad, y: zone.y + 80 };
+	}
+
+	function getActiveColumns() {
+		if (kanbanState.mode === "zone") {
+			// In zone mode, use zone-based columns stored separately
+			if (!kanbanState.zoneColumns) {
+				kanbanState.zoneColumns = ZONE_COLUMNS.map((z) => ({
+					id: z.id,
+					title: z.title,
+					cards: [],
+				}));
+			}
+			return kanbanState.zoneColumns;
+		}
+		return kanbanState.columns;
+	}
+
+	function switchKanbanMode(newMode) {
+		kanbanState.mode = newMode;
+		if (newMode === "zone" && !kanbanState.zoneColumns) {
+			kanbanState.zoneColumns = ZONE_COLUMNS.map((z) => ({
+				id: z.id,
+				title: z.title,
+				cards: [],
+			}));
+		}
+		expandedCardId = null;
+		renderKanban();
+		saveCanvasDebounced();
+	}
+
 	function renderKanban() {
 		if (!kanbanBoardEl) return;
 		kanbanBoardEl.innerHTML = "";
 
+		const mode = kanbanState.mode || "free";
+
+		// Mode toggle bar
+		const modeBar = document.createElement("div");
+		modeBar.className = "kanban-mode-bar";
+
+		const freeBtn = document.createElement("button");
+		freeBtn.type = "button";
+		freeBtn.className = "kanban-mode-btn" + (mode === "free" ? " kanban-mode-active" : "");
+		freeBtn.textContent = "Free";
+		freeBtn.addEventListener("click", () => switchKanbanMode("free"));
+		modeBar.appendChild(freeBtn);
+
+		const zoneBtn = document.createElement("button");
+		zoneBtn.type = "button";
+		zoneBtn.className = "kanban-mode-btn" + (mode === "zone" ? " kanban-mode-active" : "");
+		zoneBtn.textContent = "Zone";
+		zoneBtn.addEventListener("click", () => switchKanbanMode("zone"));
+		modeBar.appendChild(zoneBtn);
+
+		kanbanBoardEl.appendChild(modeBar);
+
 		// Columns container + trash drop zone
 		const colsWrap = document.createElement("div");
-		colsWrap.className = "kanban-columns";
+		colsWrap.className = "kanban-columns" + (mode === "zone" ? " kanban-columns-zone" : "");
 
-		for (const col of kanbanState.columns) {
+		const activeCols = getActiveColumns();
+
+		for (const col of activeCols) {
 			const colEl = document.createElement("div");
 			colEl.className = "kanban-column";
 			colEl.dataset.colId = col.id;
+
+			// Zone mode: apply zone accent color
+			const zoneDef = ZONE_COLUMNS.find((z) => z.id === col.id);
+			if (mode === "zone" && zoneDef) {
+				colEl.style.borderTopColor = zoneDef.color;
+				colEl.classList.add("kanban-column-zone");
+			}
 
 			const header = document.createElement("div");
 			header.className = "kanban-column-header";
 
 			const title = document.createElement("div");
 			title.className = "kanban-column-title";
-			title.contentEditable = "true";
+			if (mode === "zone") {
+				title.contentEditable = "false";
+				if (zoneDef) title.style.color = zoneDef.color;
+			} else {
+				title.contentEditable = "true";
+			}
 			title.spellcheck = false;
 			title.textContent = col.title;
 			title.addEventListener("blur", () => {
+				if (mode === "zone") return;
 				const newTitle = title.textContent.trim() || "Untitled";
 				col.title = newTitle;
 				title.textContent = newTitle;
@@ -5054,6 +5369,7 @@ init();
 
 	// Pen mode keyboard shortcuts
 	window.addEventListener("keydown", (e) => {
+		if (isScratchpadOpen) return;
 		// Tool shortcuts (only when not typing in input/contenteditable)
 		if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
 			const focused = document.activeElement;
