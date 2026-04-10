@@ -232,7 +232,6 @@ function applyZoom(deltaY, focalX, focalY) {
 	updateCanvas();
 }
 
-let wheelPanEndTimer = null;
 
 canvasEl.addEventListener("wheel", (e) => {
 	e.preventDefault();
@@ -245,55 +244,9 @@ canvasEl.addEventListener("wheel", (e) => {
 			canvasX -= e.deltaX * 1.2;
 			canvasY -= e.deltaY * 1.2;
 			updateCanvas();
-			clearTimeout(wheelPanEndTimer);
-			// Disabled: auto-fit on zone cross was moving viewport unexpectedly
-			// wheelPanEndTimer = setTimeout(maybeAutoFitOnZoneCross, 260);
 		}
 	}
 }, { passive: false });
-
-// Auto-fit zone when viewport crosses zone boundaries
-let lastCenterZoneId = null;
-let autoFitEnabled = false;
-
-function getCurrentCenterZoneId() {
-	const vw = canvasEl.clientWidth;
-	const vh = canvasEl.clientHeight;
-	const ccx = (vw / 2 - canvasX) / canvasScale;
-	const ccy = (vh / 2 - canvasY) / canvasScale;
-	const z = getZoneAtPoint(ccx, ccy);
-	return z ? z.id : null;
-}
-
-function fitZoneById(zoneId) {
-	const zone = getZones().find((z) => z.id === zoneId);
-	if (!zone) return;
-	const vw = canvasEl.clientWidth;
-	const vh = canvasEl.clientHeight;
-	const padding = 0.92;
-	const fitZoom = Math.min(
-		(vw * padding) / zone.width,
-		(vh * padding) / zone.height,
-	);
-	canvasScale = Math.max(ZOOM_MIN, Math.min(fitZoom, ZOOM_MAX));
-	const cx = zone.x + zone.width / 2;
-	const cy = zone.y + zone.height / 2;
-	canvasX = -cx * canvasScale + vw / 2;
-	canvasY = -cy * canvasScale + vh / 2;
-	showZoomIndicator();
-	updateCanvas();
-}
-
-function maybeAutoFitOnZoneCross() {
-	if (!autoFitEnabled) return;
-	const newId = getCurrentCenterZoneId();
-	if (newId && newId !== lastCenterZoneId) {
-		lastCenterZoneId = newId;
-		fitZoneById(newId);
-	} else {
-		lastCenterZoneId = newId;
-	}
-}
 
 // Zoom controls (persistent bottom-right buttons)
 const zoomInBtn = document.getElementById("zoom-in-btn");
@@ -2680,9 +2633,6 @@ async function init() {
 			restoreKanbanState(savedState.kanban);
 		}
 
-		// Initialize auto-fit tracking now that the viewport is positioned
-		lastCenterZoneId = getCurrentCenterZoneId();
-		autoFitEnabled = true;
 	}
 
 	// -- Initialize workspaces --
@@ -3288,8 +3238,6 @@ async function init() {
 			for (const h of getAllWebviews()) {
 				h.webview.style.pointerEvents = "";
 			}
-			// Disabled: auto-fit on zone cross
-			// maybeAutoFitOnZoneCross();
 		}
 
 		document.addEventListener("mousemove", onMove);
@@ -3655,8 +3603,7 @@ async function init() {
 				};
 			}
 			case "viewportSet": {
-				// Disabled: prevent external processes from moving viewport
-				console.log("[rpc] viewportSet blocked (external viewport control disabled)");
+				// Blocked: external viewport control disabled to prevent unwanted panning
 				return {};
 			}
 			case "jumpToZone": {
@@ -3677,7 +3624,6 @@ async function init() {
 				canvasY = -cy * canvasScale + rect.height / 2;
 				updateCanvas();
 				flashZone(params.zoneId);
-				lastCenterZoneId = params.zoneId;
 				saveCanvasDebounced();
 				return { jumped: params.zoneId };
 			}
