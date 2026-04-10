@@ -4743,6 +4743,31 @@ async function init() {
 		}
 	}
 
+	/** Format a single card as text */
+	function formatCardForCopy(card) {
+		let line = `- ${card.title || "(untitled)"}`;
+		const tags = [];
+		if (card.priority) tags.push(card.priority);
+		if (card.due) tags.push(card.due);
+		if (card.status) tags.push(card.status);
+		if (tags.length) line += ` [${tags.join(", ")}]`;
+		if (card.notes) line += `\n  ${card.notes.replace(/\n/g, "\n  ")}`;
+		return line;
+	}
+
+	/** Format a single column as text */
+	function formatColumnForCopy(col) {
+		let text = `## ${col.title} (${col.cards.length})\n`;
+		if (col.cards.length === 0) return text + "(empty)\n";
+		text += col.cards.map(formatCardForCopy).join("\n");
+		return text;
+	}
+
+	/** Format all columns as text */
+	function formatKanbanForCopy(columns) {
+		return columns.map(formatColumnForCopy).join("\n\n");
+	}
+
 	/** Find an open spot in a zone for placing a new tile */
 	function findOpenSpotInZone(zone) {
 		const COLS = 4;
@@ -4820,6 +4845,24 @@ async function init() {
 		zoneBtn.addEventListener("click", () => switchKanbanMode("zone"));
 		modeBar.appendChild(zoneBtn);
 
+		// Spacer to push copy button to the right
+		const spacer = document.createElement("div");
+		spacer.style.flex = "1";
+		modeBar.appendChild(spacer);
+
+		const copyAllBtn = document.createElement("button");
+		copyAllBtn.type = "button";
+		copyAllBtn.className = "kanban-mode-btn";
+		copyAllBtn.textContent = "Copy All";
+		copyAllBtn.title = "Copy all kanban content to clipboard";
+		copyAllBtn.addEventListener("click", () => {
+			const text = formatKanbanForCopy(activeCols);
+			navigator.clipboard.writeText(text);
+			copyAllBtn.textContent = "Copied!";
+			setTimeout(() => { copyAllBtn.textContent = "Copy All"; }, 1200);
+		});
+		modeBar.appendChild(copyAllBtn);
+
 		kanbanBoardEl.appendChild(modeBar);
 
 		// Columns container + trash drop zone
@@ -4872,6 +4915,22 @@ async function init() {
 			count.className = "kanban-column-count";
 			count.textContent = String(col.cards.length);
 			header.appendChild(count);
+
+			if (col.cards.length > 0) {
+				const copyColBtn = document.createElement("button");
+				copyColBtn.type = "button";
+				copyColBtn.className = "kanban-col-copy-btn";
+				copyColBtn.textContent = "Copy";
+				copyColBtn.title = `Copy ${col.title} cards`;
+				copyColBtn.addEventListener("click", (e) => {
+					e.stopPropagation();
+					const text = formatColumnForCopy(col);
+					navigator.clipboard.writeText(text);
+					copyColBtn.textContent = "Copied!";
+					setTimeout(() => { copyColBtn.textContent = "Copy"; }, 1200);
+				});
+				header.appendChild(copyColBtn);
+			}
 
 			colEl.appendChild(header);
 

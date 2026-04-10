@@ -2305,6 +2305,27 @@ body {
 	color: #4a9eff;
 }
 
+.kanban-col-copy-btn {
+	background: none;
+	border: none;
+	color: var(--muted);
+	font-size: 10px;
+	font-family: var(--font-mono);
+	padding: 0 4px;
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity 0.15s, color 0.15s;
+}
+
+.kanban-column-header:hover .kanban-col-copy-btn {
+	opacity: 0.6;
+}
+
+.kanban-col-copy-btn:hover {
+	opacity: 1 !important;
+	color: var(--fg);
+}
+
 .kanban-columns {
 	flex: 1;
 	display: flex;
