@@ -162,6 +162,12 @@ export function initZoneLayer() {
 		label.style.color = zone.borderColor;
 		el.appendChild(label);
 
+		const areaLabel = document.createElement("div");
+		areaLabel.className = "canvas-zone-area-label";
+		areaLabel.textContent = "WORKSPACE";
+		areaLabel.style.color = zone.borderColor;
+		el.appendChild(areaLabel);
+
 		const summary = document.createElement("div");
 		summary.className = "canvas-zone-summary";
 		summary.style.color = zone.borderColor;
@@ -209,7 +215,7 @@ export function repositionZones(panX, panY, zoom) {
 }
 
 /** @type {Record<string, string>} */
-const TYPE_LABELS = { term: "Term", note: "Note", text: "Text", browser: "Web", shape: "Shape" };
+const TYPE_ICONS = { term: "\u{1F5B5}", note: "\u{1F4DD}", text: "\u{1F4CC}", browser: "\u{1F310}", shape: "\u{25A0}" };
 
 /**
  * Update zone summary labels with tile-type counts.
@@ -222,9 +228,9 @@ export function updateZoneSummaries(tiles) {
 		for (const t of tiles) {
 			if (ids.has(t.id)) counts[t.type] = (counts[t.type] || 0) + 1;
 		}
-		const parts = Object.entries(counts).map(([k, v]) => `${TYPE_LABELS[k] || k} ${v}`);
+		const parts = Object.entries(counts).map(([k, v]) => `${TYPE_ICONS[k] || k} ${v}`);
 		const el = summaryDOMs.get(zone.id);
-		if (el) el.textContent = parts.length ? parts.join(" / ") : "Empty";
+		if (el) el.textContent = parts.length ? parts.join("  ") : "";
 	}
 }
 

@@ -3735,6 +3735,7 @@ async function init() {
 	const scratchpadNewEntryBtn = document.getElementById("scratchpad-new-entry");
 	const scratchpadWordcount = document.getElementById("scratchpad-wordcount");
 	const scratchpadCopyBtn = document.getElementById("scratchpad-copy");
+	const scratchpadCopyAllBtn = document.getElementById("scratchpad-copy-all");
 	const scratchpadSendCanvasBtn = document.getElementById("scratchpad-send-canvas");
 
 	let scratchpadTool = "text";
@@ -3999,6 +4000,30 @@ async function init() {
 		});
 	}
 
+	// Copy all entries
+	if (scratchpadCopyAllBtn) {
+		scratchpadCopyAllBtn.addEventListener("click", () => {
+			saveCurrentEntry();
+			const keys = Object.keys(spEntries).sort();
+			const parts = [];
+			for (const key of keys) {
+				const entry = spEntries[key];
+				if (!entry || !entry.content) continue;
+				const tmp = document.createElement("div");
+				tmp.innerHTML = entry.content;
+				const text = tmp.textContent || "";
+				if (!text.trim()) continue;
+				parts.push(`--- ${key} ---\n${text.trim()}`);
+			}
+			const all = parts.join("\n\n");
+			if (!all) return;
+			navigator.clipboard.writeText(all).then(() => {
+				scratchpadCopyAllBtn.textContent = "Copied!";
+				setTimeout(() => { scratchpadCopyAllBtn.textContent = "Copy All"; }, 1500);
+			});
+		});
+	}
+
 	// Send to canvas as sticky note
 	if (scratchpadSendCanvasBtn) {
 		scratchpadSendCanvasBtn.addEventListener("click", () => {
@@ -4101,7 +4126,6 @@ async function init() {
 	if (scratchpadDockBtn) {
 		scratchpadDockBtn.addEventListener("mousedown", (e) => e.stopPropagation());
 		scratchpadDockBtn.addEventListener("click", () => {
-			document.title = "[memo] CLICKED";
 			toggleScratchpad();
 		});
 	}

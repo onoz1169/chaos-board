@@ -1390,11 +1390,28 @@ body {
 	text-shadow: 0 0 12px currentColor;
 }
 
+.canvas-zone-area-label {
+	position: absolute;
+	top: 12px;
+	left: 16px;
+	font-size: 14px;
+	font-weight: 700;
+	letter-spacing: 0.15em;
+	opacity: 0.35;
+	font-family: var(--font-mono);
+	pointer-events: none;
+	user-select: none;
+}
+
 .canvas-zone-summary {
-	font-size: 12px;
-	opacity: 0.8;
-	margin-top: 2px;
+	position: absolute;
+	top: 8px;
+	right: 12px;
+	font-size: 13px;
+	opacity: 0.5;
 	letter-spacing: 1px;
+	pointer-events: none;
+	user-select: none;
 }
 
 /* 5W1H strip at bottom of each zone — 6 rows stacked vertically */
