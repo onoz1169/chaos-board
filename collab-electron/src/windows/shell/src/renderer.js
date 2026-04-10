@@ -5037,7 +5037,10 @@ async function init() {
 
 		kanbanBoardEl.appendChild(colsWrap);
 
-		// Trash / archive drop zone
+		// Trash / archive drop zone + expandable archive list
+		const archiveSection = document.createElement("div");
+		archiveSection.className = "kanban-archive-section";
+
 		const trash = document.createElement("div");
 		trash.className = "kanban-trash";
 		trash.title = "Drop here to archive";
@@ -5068,7 +5071,64 @@ async function init() {
 			saveCanvasDebounced();
 		});
 
-		kanbanBoardEl.appendChild(trash);
+		// Click trash to toggle archive list
+		if (kanbanState.archived.length > 0) {
+			trash.style.cursor = "pointer";
+			trash.addEventListener("click", () => {
+				archiveSection.classList.toggle("kanban-archive-open");
+			});
+		}
+
+		archiveSection.appendChild(trash);
+
+		// Archive list (hidden by default, shown on click)
+		if (kanbanState.archived.length > 0) {
+			const archiveList = document.createElement("div");
+			archiveList.className = "kanban-archive-list";
+
+			for (const card of kanbanState.archived) {
+				const row = document.createElement("div");
+				row.className = "kanban-archive-item";
+
+				const label = document.createElement("span");
+				label.className = "kanban-archive-item-label";
+				label.textContent = card.title || card.notes?.split(/\r?\n/)[0] || "(untitled)";
+				row.appendChild(label);
+
+				const restoreBtn = document.createElement("button");
+				restoreBtn.type = "button";
+				restoreBtn.className = "kanban-archive-restore";
+				restoreBtn.textContent = "Restore";
+				restoreBtn.addEventListener("click", (e) => {
+					e.stopPropagation();
+					kanbanState.archived = kanbanState.archived.filter((c) => c.id !== card.id);
+					// Restore to first active column
+					const cols = getActiveColumns();
+					if (cols.length > 0) cols[0].cards.push(card);
+					renderKanban();
+					saveCanvasDebounced();
+				});
+				row.appendChild(restoreBtn);
+
+				const deleteBtn = document.createElement("button");
+				deleteBtn.type = "button";
+				deleteBtn.className = "kanban-archive-delete";
+				deleteBtn.textContent = "Delete";
+				deleteBtn.addEventListener("click", (e) => {
+					e.stopPropagation();
+					kanbanState.archived = kanbanState.archived.filter((c) => c.id !== card.id);
+					renderKanban();
+					saveCanvasDebounced();
+				});
+				row.appendChild(deleteBtn);
+
+				archiveList.appendChild(row);
+			}
+
+			archiveSection.appendChild(archiveList);
+		}
+
+		kanbanBoardEl.appendChild(archiveSection);
 	}
 
 	renderKanban();

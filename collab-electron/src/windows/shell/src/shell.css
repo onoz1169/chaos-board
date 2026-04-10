@@ -2393,6 +2393,69 @@ body {
 	animation: kanbanTrashDropFlash 0.4s ease-out;
 }
 
+/* Archive section */
+.kanban-archive-section {
+	flex-shrink: 0;
+}
+
+.kanban-archive-list {
+	display: none;
+	flex-direction: column;
+	gap: 4px;
+	max-height: 200px;
+	overflow-y: auto;
+	padding: 8px 0 0;
+}
+
+.kanban-archive-open .kanban-archive-list {
+	display: flex;
+}
+
+.kanban-archive-item {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 8px;
+	background: rgba(255, 255, 255, 0.03);
+	border-radius: 4px;
+	font-size: 11px;
+	color: var(--muted);
+}
+
+.kanban-archive-item-label {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.kanban-archive-restore,
+.kanban-archive-delete {
+	background: none;
+	border: 1px solid var(--border);
+	color: var(--muted);
+	font-family: var(--font-mono);
+	font-size: 10px;
+	padding: 2px 8px;
+	border-radius: 3px;
+	cursor: pointer;
+	flex-shrink: 0;
+	transition: background 0.15s, color 0.15s;
+}
+
+.kanban-archive-restore:hover {
+	background: rgba(74, 158, 255, 0.15);
+	border-color: #4a9eff;
+	color: #4a9eff;
+}
+
+.kanban-archive-delete:hover {
+	background: rgba(239, 68, 68, 0.15);
+	border-color: #ef4444;
+	color: #ef4444;
+}
+
 .kanban-column {
 	flex: 1 1 0;
 	min-width: 180px;
