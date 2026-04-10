@@ -11,7 +11,7 @@
  */
 
 export const ZONE_W = 4200;
-export const ZONE_GAP = 500;
+export const ZONE_GAP = 1000;
 export const ZONE_H = 4000;
 export const W1H_ROW_H = 400; // height of each 5W1H row
 export const W1H_STRIP_H = W1H_ROW_H * 6; // 6 rows stacked vertically
