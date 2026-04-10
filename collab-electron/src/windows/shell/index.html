@@ -47,6 +47,12 @@
 			<div id="tile-layer"></div>
 			<div id="edge-indicators"></div>
 			<div id="zoom-indicator">100%</div>
+			<div id="zoom-controls">
+				<button type="button" id="zoom-fit-btn" title="Show all zones">All</button>
+				<button type="button" id="zoom-out-btn" title="Zoom out">−</button>
+				<button type="button" id="zoom-reset-btn" title="Reset to 100%">100%</button>
+				<button type="button" id="zoom-in-btn" title="Zoom in">+</button>
+			</div>
 			<div id="canvas-context-menu"></div>
 		</div>
 	</div>
@@ -107,7 +113,7 @@
 		<button type="button" class="pen-dock-icon dock-launch-icon" id="launch-all-btn" data-tooltip="Launch All (Cmd+Shift+L)">
 			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
 		</button>
-		<button type="button" class="pen-dock-icon dock-scratchpad-icon" id="tool-scratchpad-btn" data-tooltip="Memo (`)">
+		<button type="button" class="pen-dock-icon dock-scratchpad-icon" id="tool-scratchpad-btn" data-tooltip="Memo (M)">
 			<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
 		</button>
 		<button type="button" class="pen-dock-icon dock-help-icon" id="help-shortcut-btn" data-tooltip="Shortcuts (?)">
@@ -160,10 +166,7 @@
 				<button type="button" id="scratchpad-close">&times;</button>
 			</div>
 			<div id="scratchpad-main">
-				<div id="scratchpad-sidebar">
-					<div id="scratchpad-entry-list"></div>
-					<button type="button" id="scratchpad-new-entry">+ New</button>
-				</div>
+				<div id="scratchpad-left">
 				<div id="scratchpad-content">
 					<div id="scratchpad-toolbar">
 						<button type="button" class="sp-fmt-btn" data-cmd="bold" title="Bold (Cmd+B)"><b>B</b></button>
@@ -194,11 +197,14 @@
 					<div id="scratchpad-footer">
 						<span id="scratchpad-wordcount">0 words</span>
 						<div id="scratchpad-footer-actions">
-							<button type="button" id="scratchpad-copy" title="Copy this entry">Copy</button>
-							<button type="button" id="scratchpad-copy-all" title="Copy all entries">Copy All</button>
+							<button type="button" id="scratchpad-copy" title="Copy memo">Copy</button>
 							<button type="button" id="scratchpad-send-canvas" title="Send to canvas as sticky note">→ Canvas</button>
 						</div>
 					</div>
+				</div>
+				</div>
+				<div id="scratchpad-right">
+					<div id="kanban-board"></div>
 				</div>
 			</div>
 		</div>

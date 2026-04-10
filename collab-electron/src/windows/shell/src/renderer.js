@@ -51,7 +51,7 @@ window.shellApi.onPrefChanged((key, value) => {
 
 // -- Canvas --
 
-const ZOOM_MIN = 0.33;
+const ZOOM_MIN = 0.05;
 const ZOOM_MAX = 1;
 const ZOOM_RUBBER_BAND_K = 400;
 const CANVAS_DBLCLICK_SUPPRESS_MS = 500;
@@ -131,11 +131,13 @@ function drawGrid() {
 let onCanvasUpdate = null;
 
 const zoomIndicatorEl = document.getElementById("zoom-indicator");
+const zoomResetBtnEl = document.getElementById("zoom-reset-btn");
 
 function showZoomIndicator() {
 	const pct = Math.round(canvasScale * 100);
 	zoomIndicatorEl.textContent = `${pct}%`;
 	zoomIndicatorEl.classList.add("visible");
+	if (zoomResetBtnEl) zoomResetBtnEl.textContent = `${pct}%`;
 	clearTimeout(zoomIndicatorTimer);
 	zoomIndicatorTimer = setTimeout(() => {
 		zoomIndicatorEl.classList.remove("visible");
@@ -230,6 +232,8 @@ function applyZoom(deltaY, focalX, focalY) {
 	updateCanvas();
 }
 
+let wheelPanEndTimer = null;
+
 canvasEl.addEventListener("wheel", (e) => {
 	e.preventDefault();
 
@@ -241,9 +245,110 @@ canvasEl.addEventListener("wheel", (e) => {
 			canvasX -= e.deltaX * 1.2;
 			canvasY -= e.deltaY * 1.2;
 			updateCanvas();
+			clearTimeout(wheelPanEndTimer);
+			wheelPanEndTimer = setTimeout(maybeAutoFitOnZoneCross, 260);
 		}
 	}
 }, { passive: false });
+
+// Auto-fit zone when viewport crosses zone boundaries
+let lastCenterZoneId = null;
+let autoFitEnabled = false;
+
+function getCurrentCenterZoneId() {
+	const vw = canvasEl.clientWidth;
+	const vh = canvasEl.clientHeight;
+	const ccx = (vw / 2 - canvasX) / canvasScale;
+	const ccy = (vh / 2 - canvasY) / canvasScale;
+	const z = getZoneAtPoint(ccx, ccy);
+	return z ? z.id : null;
+}
+
+function fitZoneById(zoneId) {
+	const zone = getZones().find((z) => z.id === zoneId);
+	if (!zone) return;
+	const vw = canvasEl.clientWidth;
+	const vh = canvasEl.clientHeight;
+	const padding = 0.92;
+	const fitZoom = Math.min(
+		(vw * padding) / zone.width,
+		(vh * padding) / zone.height,
+	);
+	canvasScale = Math.max(ZOOM_MIN, Math.min(fitZoom, ZOOM_MAX));
+	const cx = zone.x + zone.width / 2;
+	const cy = zone.y + zone.height / 2;
+	canvasX = -cx * canvasScale + vw / 2;
+	canvasY = -cy * canvasScale + vh / 2;
+	showZoomIndicator();
+	updateCanvas();
+}
+
+function maybeAutoFitOnZoneCross() {
+	if (!autoFitEnabled) return;
+	const newId = getCurrentCenterZoneId();
+	if (newId && newId !== lastCenterZoneId) {
+		lastCenterZoneId = newId;
+		fitZoneById(newId);
+	} else {
+		lastCenterZoneId = newId;
+	}
+}
+
+// Zoom controls (persistent bottom-right buttons)
+const zoomInBtn = document.getElementById("zoom-in-btn");
+const zoomOutBtn = document.getElementById("zoom-out-btn");
+const zoomResetBtn = document.getElementById("zoom-reset-btn");
+const zoomFitBtn = document.getElementById("zoom-fit-btn");
+
+function zoomAtCenter(deltaY) {
+	const cw = canvasEl.clientWidth / 2;
+	const ch = canvasEl.clientHeight / 2;
+	applyZoom(deltaY, cw, ch);
+}
+
+if (zoomInBtn) zoomInBtn.addEventListener("click", () => zoomAtCenter(-120));
+if (zoomOutBtn) zoomOutBtn.addEventListener("click", () => zoomAtCenter(120));
+if (zoomResetBtn) {
+	zoomResetBtn.addEventListener("click", () => {
+		const prevScale = canvasScale;
+		canvasScale = 1;
+		const cw = canvasEl.clientWidth / 2;
+		const ch = canvasEl.clientHeight / 2;
+		const ratio = canvasScale / prevScale - 1;
+		canvasX -= (cw - canvasX) * ratio;
+		canvasY -= (ch - canvasY) * ratio;
+		showZoomIndicator();
+		updateCanvas();
+	});
+}
+
+function fitAllZones() {
+	const zones = getZones();
+	if (!zones.length) return;
+	let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+	for (const z of zones) {
+		if (z.x < minX) minX = z.x;
+		if (z.y < minY) minY = z.y;
+		if (z.x + z.width > maxX) maxX = z.x + z.width;
+		if (z.y + z.height > maxY) maxY = z.y + z.height;
+	}
+	const bboxW = maxX - minX;
+	const bboxH = maxY - minY;
+	const vw = canvasEl.clientWidth;
+	const vh = canvasEl.clientHeight;
+	const padding = 0.92;
+	const fitZoom = Math.min((vw * padding) / bboxW, (vh * padding) / bboxH);
+	canvasScale = Math.max(ZOOM_MIN, Math.min(fitZoom, ZOOM_MAX));
+	const cx = (minX + maxX) / 2;
+	const cy = (minY + maxY) / 2;
+	canvasX = -cx * canvasScale + vw / 2;
+	canvasY = -cy * canvasScale + vh / 2;
+	showZoomIndicator();
+	updateCanvas();
+}
+
+if (zoomFitBtn) zoomFitBtn.addEventListener("click", fitAllZones);
+showZoomIndicator();
 
 updateCanvas();
 
@@ -454,9 +559,19 @@ async function init() {
 		_prefCache["panel-visible-nav"] = prefNavVisible;
 	}
 
-	// Scratchpad entry state (must be declared early — used by getCanvasStateForSave)
-	let spEntries = {};
-	let spCurrentKey = null;
+	// Memo state (must be declared early — used by getCanvasStateForSave)
+	let spMemo = { content: "", drawing: "" };
+
+	// Kanban state (must be declared early — used by getCanvasStateForSave)
+	// card: { id, title, due, priority: "high"|"mid"|"low"|"", notes }
+	/** @type {{ columns: Array<{ id: string, title: string, cards: Array<any> }>, archived: Array<any> }} */
+	let kanbanState = {
+		columns: [
+			{ id: "col-todo", title: "Todo", cards: [] },
+			{ id: "col-doing", title: "Doing", cards: [] },
+		],
+		archived: [],
+	};
 
 	// DOM elements
 	const panelNav = document.getElementById("panel-nav");
@@ -691,6 +806,7 @@ async function init() {
 			penStrokes: penStrokesToJSON(),
 			connections: connectionsToJSON(),
 			scratchpad: getScratchpadStateForSave(),
+			kanban: getKanbanStateForSave(),
 		};
 	}
 
@@ -2505,6 +2621,15 @@ async function init() {
 		if (savedState.scratchpad) {
 			restoreScratchpadState(savedState.scratchpad);
 		}
+
+		// Restore kanban
+		if (savedState.kanban) {
+			restoreKanbanState(savedState.kanban);
+		}
+
+		// Initialize auto-fit tracking now that the viewport is positioned
+		lastCenterZoneId = getCurrentCenterZoneId();
+		autoFitEnabled = true;
 	}
 
 	// -- Initialize workspaces --
@@ -3106,6 +3231,7 @@ async function init() {
 			for (const h of getAllWebviews()) {
 				h.webview.style.pointerEvents = "";
 			}
+			maybeAutoFitOnZoneCross();
 		}
 
 		document.addEventListener("mousemove", onMove);
@@ -3488,17 +3614,19 @@ async function init() {
 				const container = document.getElementById("panel-viewer");
 				if (!container) return {};
 				const rect = container.getBoundingClientRect();
+				// Fit the entire zone (including 5W1H strip) inside the viewport
 				const fitZoom = Math.min(
-					rect.width * 0.85 / zone.width,
-					rect.height * 0.85 / zone.height,
+					rect.width * 0.92 / zone.width,
+					rect.height * 0.92 / zone.height,
 				);
-				canvasScale = Math.max(0.15, Math.min(fitZoom, ZOOM_MAX));
+				canvasScale = Math.max(ZOOM_MIN, Math.min(fitZoom, ZOOM_MAX));
 				const cx = zone.x + zone.width / 2;
 				const cy = zone.y + zone.height / 2;
 				canvasX = -cx * canvasScale + rect.width / 2;
 				canvasY = -cy * canvasScale + rect.height / 2;
 				updateCanvas();
 				flashZone(params.zoneId);
+				lastCenterZoneId = params.zoneId;
 				saveCanvasDebounced();
 				return { jumped: params.zoneId };
 			}
@@ -3731,11 +3859,8 @@ async function init() {
 	const scratchpadCanvas = document.getElementById("scratchpad-canvas");
 	const scratchpadBody = document.getElementById("scratchpad-body");
 	const scratchpadCtx = scratchpadCanvas ? scratchpadCanvas.getContext("2d") : null;
-	const scratchpadEntryList = document.getElementById("scratchpad-entry-list");
-	const scratchpadNewEntryBtn = document.getElementById("scratchpad-new-entry");
 	const scratchpadWordcount = document.getElementById("scratchpad-wordcount");
 	const scratchpadCopyBtn = document.getElementById("scratchpad-copy");
-	const scratchpadCopyAllBtn = document.getElementById("scratchpad-copy-all");
 	const scratchpadSendCanvasBtn = document.getElementById("scratchpad-send-canvas");
 
 	let scratchpadTool = "text";
@@ -3744,101 +3869,12 @@ async function init() {
 	let spLastY = 0;
 	let spPenColor = "#ffffff";
 
-	// Entry management: { entries: { "2026-04-10": { content, drawing }, ... }, currentEntry: "2026-04-10" }
-	// (spEntries and spCurrentKey are declared near the top of init())
+	// Memo is a single continuous document (spMemo declared at top of init())
 
-	function todayKey() {
-		const d = new Date();
-		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-	}
-
-	function formatEntryLabel(key) {
-		const [y, m, d] = key.split("-");
-		const today = todayKey();
-		const label = `${m}/${d}`;
-		return key === today ? `${label} (today)` : label;
-	}
-
-	function getEntryPreview(entry) {
-		if (!entry || !entry.content) return "";
-		const tmp = document.createElement("div");
-		tmp.innerHTML = entry.content;
-		const text = tmp.textContent || "";
-		return text.slice(0, 40).trim();
-	}
-
-	function saveCurrentEntry() {
-		if (!spCurrentKey) return;
-		if (!spEntries[spCurrentKey]) spEntries[spCurrentKey] = {};
-		spEntries[spCurrentKey].content = scratchpadEditor?.innerHTML || "";
+	function saveMemo() {
+		spMemo.content = scratchpadEditor?.innerHTML || "";
 		if (scratchpadCanvas && scratchpadCanvas.width > 0 && scratchpadCanvas.height > 0) {
-			try { spEntries[spCurrentKey].drawing = scratchpadCanvas.toDataURL(); } catch {}
-		}
-	}
-
-	function loadEntry(key) {
-		if (spCurrentKey) saveCurrentEntry();
-		spCurrentKey = key;
-		if (!spEntries[key]) spEntries[key] = { content: "", drawing: "" };
-		const entry = spEntries[key];
-		if (scratchpadEditor) scratchpadEditor.innerHTML = entry.content || "";
-		if (scratchpadCtx && scratchpadCanvas) {
-			scratchpadCtx.clearRect(0, 0, scratchpadCanvas.width, scratchpadCanvas.height);
-			if (entry.drawing) {
-				const img = new Image();
-				img.onload = () => {
-					scratchpadCanvas.width = img.width;
-					scratchpadCanvas.height = img.height;
-					scratchpadCtx.drawImage(img, 0, 0);
-				};
-				img.src = entry.drawing;
-			}
-		}
-		renderEntryList();
-		updateWordCount();
-	}
-
-	function deleteEntry(key) {
-		if (Object.keys(spEntries).length <= 1) return;
-		delete spEntries[key];
-		const keys = Object.keys(spEntries).sort().reverse();
-		loadEntry(keys[0] || todayKey());
-		saveCanvasDebounced();
-	}
-
-	function renderEntryList() {
-		if (!scratchpadEntryList) return;
-		const keys = Object.keys(spEntries).sort().reverse();
-		scratchpadEntryList.innerHTML = "";
-		for (const key of keys) {
-			const item = document.createElement("div");
-			item.className = "sp-entry-item" + (key === spCurrentKey ? " sp-entry-active" : "");
-
-			const info = document.createElement("div");
-			const dateSpan = document.createElement("span");
-			dateSpan.className = "sp-entry-date";
-			dateSpan.textContent = formatEntryLabel(key);
-			info.appendChild(dateSpan);
-			const preview = document.createElement("span");
-			preview.className = "sp-entry-preview";
-			preview.textContent = getEntryPreview(spEntries[key]);
-			info.appendChild(preview);
-			item.appendChild(info);
-
-			if (Object.keys(spEntries).length > 1) {
-				const del = document.createElement("button");
-				del.className = "sp-entry-delete";
-				del.textContent = "×";
-				del.title = "Delete entry";
-				del.addEventListener("click", (e) => {
-					e.stopPropagation();
-					deleteEntry(key);
-				});
-				item.appendChild(del);
-			}
-
-			item.addEventListener("click", () => loadEntry(key));
-			scratchpadEntryList.appendChild(item);
+			try { spMemo.drawing = scratchpadCanvas.toDataURL(); } catch {}
 		}
 	}
 
@@ -3853,49 +3889,57 @@ async function init() {
 	// Save/restore for canvas state persistence
 	function getScratchpadStateForSave() {
 		try {
-			saveCurrentEntry();
+			saveMemo();
 		} catch (err) {
-			console.error("saveCurrentEntry error:", err);
+			console.error("saveMemo error:", err);
 		}
-		return { entries: spEntries || {}, currentEntry: spCurrentKey };
+		return { content: spMemo.content || "", drawing: spMemo.drawing || "" };
 	}
 
 	function restoreScratchpadState(saved) {
 		try {
-			if (saved && saved.entries) {
-				// New multi-entry format
-				spEntries = saved.entries;
-				spCurrentKey = saved.currentEntry || Object.keys(spEntries).sort().reverse()[0] || todayKey();
+			if (saved && typeof saved.content === "string" && !saved.entries) {
+				// New single-memo format
+				spMemo = { content: saved.content || "", drawing: saved.drawing || "" };
+			} else if (saved && saved.entries && typeof saved.entries === "object") {
+				// Legacy multi-entry format — merge all entries chronologically into one
+				const keys = Object.keys(saved.entries).sort();
+				const htmlParts = [];
+				let latestDrawing = "";
+				for (const key of keys) {
+					const entry = saved.entries[key];
+					if (!entry) continue;
+					const content = (entry.content || "").trim();
+					if (content) {
+						htmlParts.push(`<h3>${key}</h3>${content}`);
+					}
+					if (entry.drawing) latestDrawing = entry.drawing;
+				}
+				spMemo = {
+					content: htmlParts.join("<br>"),
+					drawing: latestDrawing,
+				};
 			} else if (saved && (saved.content || saved.drawing)) {
-				// Legacy single-entry format — migrate
-				const key = todayKey();
-				spEntries = { [key]: { content: saved.content || "", drawing: saved.drawing || "" } };
-				spCurrentKey = key;
+				// Oldest legacy format
+				spMemo = { content: saved.content || "", drawing: saved.drawing || "" };
 			} else {
-				// No valid data — start fresh
-				const key = todayKey();
-				spEntries = { [key]: { content: "", drawing: "" } };
-				spCurrentKey = key;
+				spMemo = { content: "", drawing: "" };
 			}
-			// Load current entry into DOM
-			if (!spEntries[spCurrentKey]) spEntries[spCurrentKey] = { content: "", drawing: "" };
-			const entry = spEntries[spCurrentKey];
-			if (scratchpadEditor) scratchpadEditor.innerHTML = entry.content || "";
-			if (scratchpadCtx && scratchpadCanvas && entry.drawing) {
+			// Load into DOM
+			if (scratchpadEditor) scratchpadEditor.innerHTML = spMemo.content || "";
+			if (scratchpadCtx && scratchpadCanvas && spMemo.drawing) {
 				const img = new Image();
 				img.onload = () => {
 					scratchpadCanvas.width = img.width;
 					scratchpadCanvas.height = img.height;
 					scratchpadCtx.drawImage(img, 0, 0);
 				};
-				img.src = entry.drawing;
+				img.src = spMemo.drawing;
 			}
-			renderEntryList();
+			updateWordCount();
 		} catch (err) {
 			console.error("restoreScratchpadState error:", err);
-			const key = todayKey();
-			spEntries = { [key]: { content: "", drawing: "" } };
-			spCurrentKey = key;
+			spMemo = { content: "", drawing: "" };
 		}
 	}
 
@@ -3976,19 +4020,6 @@ async function init() {
 		});
 	});
 
-	// New entry button
-	if (scratchpadNewEntryBtn) {
-		scratchpadNewEntryBtn.addEventListener("click", () => {
-			const key = todayKey();
-			if (!spEntries[key]) {
-				spEntries[key] = { content: "", drawing: "" };
-			}
-			loadEntry(key);
-			scratchpadEditor?.focus();
-			saveCanvasDebounced();
-		});
-	}
-
 	// Copy button
 	if (scratchpadCopyBtn) {
 		scratchpadCopyBtn.addEventListener("click", () => {
@@ -3996,30 +4027,6 @@ async function init() {
 			navigator.clipboard.writeText(text).then(() => {
 				scratchpadCopyBtn.textContent = "Copied!";
 				setTimeout(() => { scratchpadCopyBtn.textContent = "Copy"; }, 1500);
-			});
-		});
-	}
-
-	// Copy all entries
-	if (scratchpadCopyAllBtn) {
-		scratchpadCopyAllBtn.addEventListener("click", () => {
-			saveCurrentEntry();
-			const keys = Object.keys(spEntries).sort();
-			const parts = [];
-			for (const key of keys) {
-				const entry = spEntries[key];
-				if (!entry || !entry.content) continue;
-				const tmp = document.createElement("div");
-				tmp.innerHTML = entry.content;
-				const text = tmp.textContent || "";
-				if (!text.trim()) continue;
-				parts.push(`--- ${key} ---\n${text.trim()}`);
-			}
-			const all = parts.join("\n\n");
-			if (!all) return;
-			navigator.clipboard.writeText(all).then(() => {
-				scratchpadCopyAllBtn.textContent = "Copied!";
-				setTimeout(() => { scratchpadCopyAllBtn.textContent = "Copy All"; }, 1500);
 			});
 		});
 	}
@@ -4138,7 +4145,7 @@ async function init() {
 		});
 	}
 
-	// Keyboard: backtick to toggle, Escape to close
+	// Keyboard: M to toggle memo, Escape to close
 	window.addEventListener("keydown", (e) => {
 		if (e.key === "Escape" && isScratchpadOpen) {
 			e.preventDefault();
@@ -4147,7 +4154,7 @@ async function init() {
 			return;
 		}
 
-		if (e.key === "`" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+		if ((e.key === "m" || e.key === "M") && !e.metaKey && !e.ctrlKey && !e.altKey) {
 			if (isScratchpadOpen) {
 				e.preventDefault();
 				closeScratchpad();
@@ -4167,6 +4174,507 @@ async function init() {
 			}
 		}
 	}, true);
+
+	// -- Kanban board --
+	const kanbanBoardEl = document.getElementById("kanban-board");
+
+	function getKanbanStateForSave() {
+		return kanbanState;
+	}
+
+	function normalizeCard(raw) {
+		return {
+			id: raw && raw.id ? raw.id : genCardId(),
+			title: (raw && (raw.title || raw.text)) || "",
+			due: (raw && raw.due) || "",
+			priority: (raw && raw.priority) || "",
+			notes: (raw && raw.notes) || "",
+		};
+	}
+
+	function restoreKanbanState(saved) {
+		try {
+			if (saved && Array.isArray(saved.columns) && saved.columns.length > 0) {
+				// Filter out legacy "Done" column — its cards move to archived
+				const archivedFromDone = [];
+				const activeCols = [];
+				for (const c of saved.columns) {
+					const title = (c.title || "").toLowerCase();
+					const id = (c.id || "").toLowerCase();
+					const isDone = id === "col-done" || title === "done";
+					const normalizedCards = Array.isArray(c.cards) ? c.cards.map(normalizeCard) : [];
+					if (isDone) {
+						archivedFromDone.push(...normalizedCards);
+					} else {
+						activeCols.push({
+							id: c.id || `col-${Math.random().toString(36).slice(2, 8)}`,
+							title: c.title || "Untitled",
+							cards: normalizedCards,
+						});
+					}
+				}
+				// Ensure at least Todo + Doing exist
+				if (activeCols.length === 0) {
+					activeCols.push(
+						{ id: "col-todo", title: "Todo", cards: [] },
+						{ id: "col-doing", title: "Doing", cards: [] },
+					);
+				}
+				const savedArchived = Array.isArray(saved.archived) ? saved.archived.map(normalizeCard) : [];
+				kanbanState = {
+					columns: activeCols,
+					archived: [...savedArchived, ...archivedFromDone],
+				};
+			}
+			renderKanban();
+		} catch (err) {
+			console.error("restoreKanbanState error:", err);
+		}
+	}
+
+	function genCardId() {
+		return `card-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+	}
+
+	// Satisfying "throw into trash" sound — synthesized via Web Audio
+	// A downward whoosh (filtered noise) + a bright two-note chime
+	function playTrashSound() {
+		try {
+			const AC = window.AudioContext || window.webkitAudioContext;
+			if (!AC) return;
+			const ctx = new AC();
+			const now = ctx.currentTime;
+
+			// 1) Whoosh: filtered noise with downward sweep
+			const noiseLen = Math.floor(ctx.sampleRate * 0.35);
+			const noiseBuf = ctx.createBuffer(1, noiseLen, ctx.sampleRate);
+			const noiseData = noiseBuf.getChannelData(0);
+			for (let i = 0; i < noiseLen; i++) {
+				noiseData[i] = (Math.random() * 2 - 1) * (1 - i / noiseLen);
+			}
+			const noise = ctx.createBufferSource();
+			noise.buffer = noiseBuf;
+
+			const filter = ctx.createBiquadFilter();
+			filter.type = "bandpass";
+			filter.Q.value = 1.2;
+			filter.frequency.setValueAtTime(3000, now);
+			filter.frequency.exponentialRampToValueAtTime(400, now + 0.25);
+
+			const noiseGain = ctx.createGain();
+			noiseGain.gain.setValueAtTime(0.18, now);
+			noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+
+			noise.connect(filter).connect(noiseGain).connect(ctx.destination);
+			noise.start(now);
+			noise.stop(now + 0.35);
+
+			// 2) Bright chime: two quick ascending notes (C6 → E6)
+			function chime(freq, startOffset, dur) {
+				const osc = ctx.createOscillator();
+				osc.type = "sine";
+				osc.frequency.value = freq;
+				const g = ctx.createGain();
+				g.gain.setValueAtTime(0, now + startOffset);
+				g.gain.linearRampToValueAtTime(0.18, now + startOffset + 0.01);
+				g.gain.exponentialRampToValueAtTime(0.001, now + startOffset + dur);
+				osc.connect(g).connect(ctx.destination);
+				osc.start(now + startOffset);
+				osc.stop(now + startOffset + dur + 0.02);
+			}
+			chime(1047, 0.15, 0.18); // C6
+			chime(1319, 0.22, 0.22); // E6
+
+			setTimeout(() => { try { ctx.close(); } catch {} }, 700);
+		} catch (err) {
+			// Fail silently — sound is not critical
+		}
+	}
+
+	function findCard(cardId) {
+		for (const col of kanbanState.columns) {
+			const card = col.cards.find((c) => c.id === cardId);
+			if (card) return { col, card };
+		}
+		return null;
+	}
+
+	function formatDueBadge(due) {
+		if (!due) return "";
+		try {
+			const d = new Date(due + "T00:00:00");
+			if (isNaN(d.getTime())) return due;
+			const now = new Date();
+			now.setHours(0, 0, 0, 0);
+			const diffDays = Math.round((d.getTime() - now.getTime()) / 86400000);
+			const mm = String(d.getMonth() + 1).padStart(2, "0");
+			const dd = String(d.getDate()).padStart(2, "0");
+			if (diffDays === 0) return `${mm}/${dd} (today)`;
+			if (diffDays === 1) return `${mm}/${dd} (tmrw)`;
+			if (diffDays < 0) return `${mm}/${dd} (${-diffDays}d late)`;
+			if (diffDays <= 7) return `${mm}/${dd} (${diffDays}d)`;
+			return `${mm}/${dd}`;
+		} catch {
+			return due;
+		}
+	}
+
+	function getDueState(due) {
+		if (!due) return "";
+		try {
+			const d = new Date(due + "T00:00:00");
+			if (isNaN(d.getTime())) return "";
+			const now = new Date();
+			now.setHours(0, 0, 0, 0);
+			const diff = Math.round((d.getTime() - now.getTime()) / 86400000);
+			if (diff < 0) return "overdue";
+			if (diff <= 2) return "soon";
+			return "";
+		} catch {
+			return "";
+		}
+	}
+
+	function renderCardCollapsed(cardEl, card) {
+		cardEl.innerHTML = "";
+		cardEl.className = "kanban-card";
+		if (card.priority) cardEl.classList.add(`kanban-priority-${card.priority}`);
+
+		// Derive a display label: title > first line of notes > due date > placeholder
+		let displayText = card.title;
+		let isTitleFallback = false;
+		if (!displayText && card.notes) {
+			const firstLine = card.notes.split(/\r?\n/)[0].trim();
+			if (firstLine) {
+				displayText = firstLine;
+				isTitleFallback = true;
+			}
+		}
+		if (!displayText && card.due) {
+			displayText = formatDueBadge(card.due);
+			isTitleFallback = true;
+		}
+		if (!displayText) displayText = "(empty)";
+
+		const titleEl = document.createElement("div");
+		titleEl.className = "kanban-card-title";
+		if (isTitleFallback) titleEl.classList.add("kanban-card-title-fallback");
+		titleEl.textContent = displayText;
+		cardEl.appendChild(titleEl);
+
+		// Show meta row if there's a due date, or if notes exist AND aren't already the title fallback
+		const showDue = !!card.due && !!card.title;
+		const showNotesIcon = !!card.notes && !!card.title;
+		if (showDue || showNotesIcon) {
+			const meta = document.createElement("div");
+			meta.className = "kanban-card-meta";
+			if (showDue) {
+				const dueBadge = document.createElement("span");
+				dueBadge.className = "kanban-due-badge";
+				const state = getDueState(card.due);
+				if (state) dueBadge.classList.add(`kanban-due-${state}`);
+				dueBadge.textContent = formatDueBadge(card.due);
+				meta.appendChild(dueBadge);
+			}
+			if (showNotesIcon) {
+				const notesIcon = document.createElement("span");
+				notesIcon.className = "kanban-notes-indicator";
+				notesIcon.textContent = "\u2630";
+				notesIcon.title = "Has notes";
+				meta.appendChild(notesIcon);
+			}
+			cardEl.appendChild(meta);
+		}
+	}
+
+	function renderCardExpanded(cardEl, card, col) {
+		cardEl.innerHTML = "";
+		cardEl.className = "kanban-card kanban-card-expanded";
+		if (card.priority) cardEl.classList.add(`kanban-priority-${card.priority}`);
+
+		const form = document.createElement("div");
+		form.className = "kanban-card-form";
+
+		const titleInput = document.createElement("input");
+		titleInput.type = "text";
+		titleInput.className = "kanban-field-title";
+		titleInput.placeholder = "Task title";
+		titleInput.value = card.title || "";
+		form.appendChild(titleInput);
+
+		const row = document.createElement("div");
+		row.className = "kanban-field-row";
+
+		const dueInput = document.createElement("input");
+		dueInput.type = "date";
+		dueInput.className = "kanban-field-due";
+		dueInput.value = card.due || "";
+		row.appendChild(dueInput);
+
+		const prioSelect = document.createElement("div");
+		prioSelect.className = "kanban-prio-group";
+		const prios = [
+			{ key: "", label: "—" },
+			{ key: "low", label: "Low" },
+			{ key: "mid", label: "Mid" },
+			{ key: "high", label: "High" },
+		];
+		let currentPrio = card.priority || "";
+		for (const p of prios) {
+			const btn = document.createElement("button");
+			btn.type = "button";
+			btn.className = "kanban-prio-btn";
+			if (p.key) btn.classList.add(`kanban-prio-${p.key}`);
+			if (currentPrio === p.key) btn.classList.add("kanban-prio-active");
+			btn.textContent = p.label;
+			btn.addEventListener("click", (e) => {
+				e.stopPropagation();
+				currentPrio = p.key;
+				prioSelect.querySelectorAll(".kanban-prio-btn").forEach((b) =>
+					b.classList.remove("kanban-prio-active"),
+				);
+				btn.classList.add("kanban-prio-active");
+			});
+			prioSelect.appendChild(btn);
+		}
+		row.appendChild(prioSelect);
+
+		form.appendChild(row);
+
+		const notesArea = document.createElement("textarea");
+		notesArea.className = "kanban-field-notes";
+		notesArea.placeholder = "Notes / details";
+		notesArea.rows = 3;
+		notesArea.value = card.notes || "";
+		form.appendChild(notesArea);
+
+		const actions = document.createElement("div");
+		actions.className = "kanban-card-actions";
+
+		const saveBtn = document.createElement("button");
+		saveBtn.type = "button";
+		saveBtn.className = "kanban-save-btn";
+		saveBtn.textContent = "Save";
+		actions.appendChild(saveBtn);
+
+		const cancelBtn = document.createElement("button");
+		cancelBtn.type = "button";
+		cancelBtn.className = "kanban-cancel-btn";
+		cancelBtn.textContent = "Cancel";
+		actions.appendChild(cancelBtn);
+
+		form.appendChild(actions);
+		cardEl.appendChild(form);
+
+		function commit() {
+			const newTitle = titleInput.value.trim();
+			const newDue = dueInput.value || "";
+			const newPrio = currentPrio;
+			const newNotes = notesArea.value;
+			const hasAny = !!(newTitle || newDue || newPrio || newNotes.trim());
+			if (!hasAny) {
+				// All fields empty — remove card
+				col.cards = col.cards.filter((c) => c.id !== card.id);
+			} else {
+				card.title = newTitle;
+				card.due = newDue;
+				card.priority = newPrio;
+				card.notes = newNotes;
+			}
+			expandedCardId = null;
+			renderKanban();
+			saveCanvasDebounced();
+		}
+
+		function cancel() {
+			if (!card.title && !card.due && !card.priority && !card.notes) {
+				// Was a new empty card — remove it
+				col.cards = col.cards.filter((c) => c.id !== card.id);
+			}
+			renderKanban();
+		}
+
+		saveBtn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			commit();
+		});
+		cancelBtn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			cancel();
+		});
+
+		cardEl.addEventListener("keydown", (e) => {
+			if (e.key === "Escape") {
+				e.preventDefault();
+				cancel();
+			} else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+				e.preventDefault();
+				commit();
+			}
+		});
+
+		setTimeout(() => titleInput.focus(), 0);
+	}
+
+	let expandedCardId = null;
+
+	function renderKanban() {
+		if (!kanbanBoardEl) return;
+		kanbanBoardEl.innerHTML = "";
+
+		// Columns container + trash drop zone
+		const colsWrap = document.createElement("div");
+		colsWrap.className = "kanban-columns";
+
+		for (const col of kanbanState.columns) {
+			const colEl = document.createElement("div");
+			colEl.className = "kanban-column";
+			colEl.dataset.colId = col.id;
+
+			const header = document.createElement("div");
+			header.className = "kanban-column-header";
+
+			const title = document.createElement("div");
+			title.className = "kanban-column-title";
+			title.contentEditable = "true";
+			title.spellcheck = false;
+			title.textContent = col.title;
+			title.addEventListener("blur", () => {
+				const newTitle = title.textContent.trim() || "Untitled";
+				col.title = newTitle;
+				title.textContent = newTitle;
+				saveCanvasDebounced();
+			});
+			title.addEventListener("keydown", (e) => {
+				if (e.key === "Enter") {
+					e.preventDefault();
+					title.blur();
+				}
+			});
+			header.appendChild(title);
+
+			const count = document.createElement("span");
+			count.className = "kanban-column-count";
+			count.textContent = String(col.cards.length);
+			header.appendChild(count);
+
+			colEl.appendChild(header);
+
+			const cardsEl = document.createElement("div");
+			cardsEl.className = "kanban-cards";
+
+			for (const card of col.cards) {
+				const cardEl = document.createElement("div");
+				cardEl.dataset.cardId = card.id;
+				cardEl.draggable = true;
+
+				const isExpanded = expandedCardId === card.id;
+				if (isExpanded) {
+					renderCardExpanded(cardEl, card, col);
+				} else {
+					renderCardCollapsed(cardEl, card);
+				}
+
+				if (!isExpanded) {
+					cardEl.addEventListener("click", (e) => {
+						if (e.target.closest(".kanban-card-delete")) return;
+						expandedCardId = card.id;
+						renderKanban();
+					});
+				}
+
+				cardEl.addEventListener("dragstart", (e) => {
+					cardEl.classList.add("kanban-card-dragging");
+					if (e.dataTransfer) {
+						e.dataTransfer.effectAllowed = "move";
+						e.dataTransfer.setData("text/plain", card.id);
+					}
+				});
+				cardEl.addEventListener("dragend", () => {
+					cardEl.classList.remove("kanban-card-dragging");
+					document.querySelectorAll(".kanban-drag-over")
+						.forEach((el) => el.classList.remove("kanban-drag-over"));
+				});
+
+				cardsEl.appendChild(cardEl);
+			}
+
+			colEl.appendChild(cardsEl);
+
+			colEl.addEventListener("dragover", (e) => {
+				e.preventDefault();
+				if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+				colEl.classList.add("kanban-drag-over");
+			});
+			colEl.addEventListener("dragleave", (e) => {
+				if (e.target === colEl) colEl.classList.remove("kanban-drag-over");
+			});
+			colEl.addEventListener("drop", (e) => {
+				e.preventDefault();
+				colEl.classList.remove("kanban-drag-over");
+				const cardId = e.dataTransfer?.getData("text/plain");
+				if (!cardId) return;
+				const found = findCard(cardId);
+				if (!found) return;
+				if (found.col.id === col.id) return;
+				found.col.cards = found.col.cards.filter((c) => c.id !== cardId);
+				col.cards.push(found.card);
+				renderKanban();
+				saveCanvasDebounced();
+			});
+
+			const addBtn = document.createElement("button");
+			addBtn.type = "button";
+			addBtn.className = "kanban-add-card";
+			addBtn.textContent = "+ Add task";
+			addBtn.addEventListener("click", () => {
+				const newCard = { id: genCardId(), title: "", due: "", priority: "", notes: "" };
+				col.cards.push(newCard);
+				expandedCardId = newCard.id;
+				renderKanban();
+			});
+			colEl.appendChild(addBtn);
+
+			colsWrap.appendChild(colEl);
+		}
+
+		kanbanBoardEl.appendChild(colsWrap);
+
+		// Trash / archive drop zone
+		const trash = document.createElement("div");
+		trash.className = "kanban-trash";
+		trash.title = "Drop here to archive";
+		trash.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg><span class="kanban-trash-count">${kanbanState.archived.length}</span>`;
+
+		trash.addEventListener("dragover", (e) => {
+			e.preventDefault();
+			if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+			trash.classList.add("kanban-drag-over");
+		});
+		trash.addEventListener("dragleave", () => {
+			trash.classList.remove("kanban-drag-over");
+		});
+		trash.addEventListener("drop", (e) => {
+			e.preventDefault();
+			trash.classList.remove("kanban-drag-over");
+			const cardId = e.dataTransfer?.getData("text/plain");
+			if (!cardId) return;
+			const found = findCard(cardId);
+			if (!found) return;
+			found.col.cards = found.col.cards.filter((c) => c.id !== cardId);
+			kanbanState.archived.push(found.card);
+			if (expandedCardId === cardId) expandedCardId = null;
+			playTrashSound();
+			trash.classList.add("kanban-trash-drop-flash");
+			setTimeout(() => trash.classList.remove("kanban-trash-drop-flash"), 400);
+			renderKanban();
+			saveCanvasDebounced();
+		});
+
+		kanbanBoardEl.appendChild(trash);
+	}
+
+	renderKanban();
 }
 
 async function checkFirstLaunchDialog() {
@@ -4341,7 +4849,7 @@ init();
 		{ keys: "\u2318K", desc: "Search tiles by name" },
 		{ keys: "1-5", desc: "Jump to zone (no selection)" },
 		{ keys: "\u2318\u21E7A", desc: "Auto-layout grid" },
-		{ keys: "`", desc: "Toggle scratchpad" },
+		{ keys: "M", desc: "Toggle memo" },
 	];
 
 	// Populate rows
