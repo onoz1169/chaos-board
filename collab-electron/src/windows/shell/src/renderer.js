@@ -4726,11 +4726,9 @@ async function init() {
 				window.shellApi.ptyWrite(tile.ptySessionId, "claude --dangerously-skip-permissions\n");
 				setTimeout(() => {
 					if (!tile.ptySessionId) return;
-					window.shellApi.ptyWrite(tile.ptySessionId, prompt);
-					setTimeout(() => {
-						if (!tile.ptySessionId) return;
-						window.shellApi.ptyWrite(tile.ptySessionId, "\r");
-					}, 100);
+					// Send prompt as single line (newlines → spaces) then Enter
+					const singleLine = prompt.replace(/[\r\n]+/g, " ").trim();
+					window.shellApi.ptyWrite(tile.ptySessionId, singleLine + "\r");
 				}, CLAUDE_INIT_MS);
 			}
 		}, PTY_POLL_MS);

@@ -3,8 +3,8 @@ import { TerminalTab } from "@collab/components/Terminal";
 
 /** Approximate terminal dimensions from the viewport before xterm mounts. */
 function estimateTermSize(): { cols: number; rows: number } {
-  const CHAR_WIDTH = 7.22; // Menlo 12px on macOS
-  const CELL_HEIGHT = 17; // xterm line height at fontSize 12
+  const CHAR_WIDTH = 8.4; // Menlo 14px on macOS
+  const CELL_HEIGHT = 20; // xterm line height at fontSize 14
   const w = document.documentElement.clientWidth;
   const h = document.documentElement.clientHeight;
   return {

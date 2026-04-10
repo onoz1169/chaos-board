@@ -30,7 +30,7 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData }: TerminalT
 		const term = new Terminal({
 			theme: getTheme(),
 			fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-			fontSize: 12,
+			fontSize: 14,
 			fontWeight: "300",
 			fontWeightBold: "500",
 			cursorBlink: true,
