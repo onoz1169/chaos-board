@@ -4153,9 +4153,9 @@ async function init() {
 		isScratchpadOpen = true;
 		scratchpadOverlay.style.display = "";
 		scratchpadOverlay.classList.add("visible");
-		// Load memo content into editor
-		if (scratchpadEditor && spMemo.content) {
-			scratchpadEditor.innerHTML = spMemo.content;
+		// Always restore memo content into editor (even if empty, to clear stale DOM)
+		if (scratchpadEditor) {
+			scratchpadEditor.innerHTML = spMemo.content || "";
 		}
 		setScratchpadTool(scratchpadTool);
 		updateWordCount();
@@ -4171,7 +4171,8 @@ async function init() {
 		saveMemo();
 		scratchpadOverlay.classList.remove("visible");
 		scratchpadOverlay.style.display = "none";
-		saveCanvasDebounced();
+		// Immediate save — memo content must not be lost on quick app exit
+		saveCanvasImmediate();
 	}
 
 	function toggleScratchpad() {
