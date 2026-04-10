@@ -2589,20 +2589,28 @@ body {
 	gap: 8px;
 }
 
-.kanban-field-title {
+/* Shared form field base */
+.kanban-field-title,
+.kanban-field-due,
+.kanban-field-notes {
 	background: rgba(255, 255, 255, 0.06);
 	border: 1px solid var(--border);
 	border-radius: 4px;
-	padding: 6px 8px;
-	font-size: 13px;
-	font-weight: 500;
 	color: var(--fg);
 	font-family: var(--font-mono);
 	outline: none;
 }
 
-.kanban-field-title:focus {
+.kanban-field-title:focus,
+.kanban-field-due:focus,
+.kanban-field-notes:focus {
 	border-color: #4a9eff;
+}
+
+.kanban-field-title {
+	padding: 6px 8px;
+	font-size: 13px;
+	font-weight: 500;
 }
 
 .kanban-field-row {
@@ -2613,19 +2621,9 @@ body {
 }
 
 .kanban-field-due {
-	background: rgba(255, 255, 255, 0.06);
-	border: 1px solid var(--border);
-	border-radius: 4px;
 	padding: 4px 6px;
 	font-size: 11px;
-	color: var(--fg);
-	font-family: var(--font-mono);
-	outline: none;
 	color-scheme: dark;
-}
-
-.kanban-field-due:focus {
-	border-color: #4a9eff;
 }
 
 .kanban-prio-group {
@@ -2674,20 +2672,10 @@ body {
 }
 
 .kanban-field-notes {
-	background: rgba(255, 255, 255, 0.06);
-	border: 1px solid var(--border);
-	border-radius: 4px;
 	padding: 6px 8px;
 	font-size: 11px;
-	color: var(--fg);
-	font-family: var(--font-mono);
-	outline: none;
 	resize: vertical;
 	line-height: 1.4;
-}
-
-.kanban-field-notes:focus {
-	border-color: #4a9eff;
 }
 
 .kanban-card-actions {
@@ -2743,55 +2731,7 @@ body {
 }
 
 /* AI toggle row */
-.kanban-ai-row {
-	display: flex;
-	gap: 6px;
-	align-items: center;
-	padding-top: 4px;
-	border-top: 1px solid var(--border);
-}
 
-.kanban-ai-toggle {
-	background: rgba(255, 255, 255, 0.06);
-	border: 1px solid var(--border);
-	color: var(--muted);
-	font-family: var(--font-mono);
-	font-size: 10px;
-	font-weight: 600;
-	padding: 3px 10px;
-	border-radius: 4px;
-	cursor: pointer;
-	transition: background 0.15s, color 0.15s, border-color 0.15s;
-	letter-spacing: 0.5px;
-}
-
-.kanban-ai-toggle:hover {
-	background: rgba(74, 158, 255, 0.1);
-	color: var(--fg);
-}
-
-.kanban-ai-toggle.kanban-ai-active {
-	background: rgba(74, 158, 255, 0.2);
-	border-color: #4a9eff;
-	color: #4a9eff;
-}
-
-.kanban-jump-btn {
-	background: rgba(255, 255, 255, 0.06);
-	border: 1px solid var(--border);
-	color: var(--muted);
-	font-family: var(--font-mono);
-	font-size: 10px;
-	padding: 3px 8px;
-	border-radius: 4px;
-	cursor: pointer;
-	transition: background 0.15s, color 0.15s;
-}
-
-.kanban-jump-btn:hover {
-	background: rgba(255, 255, 255, 0.12);
-	color: var(--fg);
-}
 
 /* Status badge on collapsed card */
 .kanban-status-badge {

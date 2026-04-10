@@ -4393,40 +4393,37 @@ async function init() {
 		return null;
 	}
 
-	function formatDueBadge(due) {
-		if (!due) return "";
+	const MS_PER_DAY = 86400000;
+
+	function parseDueDate(due) {
+		if (!due) return null;
 		try {
 			const d = new Date(due + "T00:00:00");
-			if (isNaN(d.getTime())) return due;
+			if (isNaN(d.getTime())) return null;
 			const now = new Date();
 			now.setHours(0, 0, 0, 0);
-			const diffDays = Math.round((d.getTime() - now.getTime()) / 86400000);
 			const mm = String(d.getMonth() + 1).padStart(2, "0");
 			const dd = String(d.getDate()).padStart(2, "0");
-			if (diffDays === 0) return `${mm}/${dd} (today)`;
-			if (diffDays === 1) return `${mm}/${dd} (tmrw)`;
-			if (diffDays < 0) return `${mm}/${dd} (${-diffDays}d late)`;
-			if (diffDays <= 7) return `${mm}/${dd} (${diffDays}d)`;
-			return `${mm}/${dd}`;
-		} catch {
-			return due;
-		}
+			return { date: d, diffDays: Math.round((d.getTime() - now.getTime()) / MS_PER_DAY), label: `${mm}/${dd}` };
+		} catch { return null; }
+	}
+
+	function formatDueBadge(due) {
+		const p = parseDueDate(due);
+		if (!p) return due || "";
+		if (p.diffDays === 0) return `${p.label} (today)`;
+		if (p.diffDays === 1) return `${p.label} (tmrw)`;
+		if (p.diffDays < 0) return `${p.label} (${-p.diffDays}d late)`;
+		if (p.diffDays <= 7) return `${p.label} (${p.diffDays}d)`;
+		return p.label;
 	}
 
 	function getDueState(due) {
-		if (!due) return "";
-		try {
-			const d = new Date(due + "T00:00:00");
-			if (isNaN(d.getTime())) return "";
-			const now = new Date();
-			now.setHours(0, 0, 0, 0);
-			const diff = Math.round((d.getTime() - now.getTime()) / 86400000);
-			if (diff < 0) return "overdue";
-			if (diff <= 2) return "soon";
-			return "";
-		} catch {
-			return "";
-		}
+		const p = parseDueDate(due);
+		if (!p) return "";
+		if (p.diffDays < 0) return "overdue";
+		if (p.diffDays <= 2) return "soon";
+		return "";
 	}
 
 	function renderCardCollapsed(cardEl, card) {
@@ -4681,6 +4678,10 @@ async function init() {
 
 	let expandedCardId = null;
 
+	const PTY_POLL_MS = 200;
+	const CLAUDE_INIT_MS = 5000;
+	const PTY_TIMEOUT_MS = 15000;
+
 	/** Launch Claude Code in a terminal tile for a kanban card */
 	function launchClaudeForCard(card, col) {
 		// Build prompt from card content
@@ -4722,9 +4723,7 @@ async function init() {
 			if (!tile || !getTile(tile.id)) { clearInterval(checkInterval); return; }
 			if (tile.ptySessionId) {
 				clearInterval(checkInterval);
-				// Step 1: Launch Claude Code in YOLO mode
 				window.shellApi.ptyWrite(tile.ptySessionId, "claude --dangerously-skip-permissions\n");
-				// Step 2: Wait for Claude to initialize, then send the task + Enter
 				setTimeout(() => {
 					if (!tile.ptySessionId) return;
 					window.shellApi.ptyWrite(tile.ptySessionId, prompt);
@@ -4732,11 +4731,10 @@ async function init() {
 						if (!tile.ptySessionId) return;
 						window.shellApi.ptyWrite(tile.ptySessionId, "\r");
 					}, 100);
-				}, 5000);
+				}, CLAUDE_INIT_MS);
 			}
-		}, 200);
-		// Safety timeout — stop checking after 15s
-		setTimeout(() => clearInterval(checkInterval), 15000);
+		}, PTY_POLL_MS);
+		setTimeout(() => clearInterval(checkInterval), PTY_TIMEOUT_MS);
 
 		saveCanvasDebounced();
 	}
@@ -4781,53 +4779,60 @@ async function init() {
 		return columns.map(formatColumnForCopy).join("\n\n");
 	}
 
+	const COPY_FEEDBACK_MS = 1200;
+
+	/** Copy text and flash button label */
+	function copyWithFeedback(btn, text, originalLabel) {
+		navigator.clipboard.writeText(text);
+		btn.textContent = "Copied!";
+		setTimeout(() => { btn.textContent = originalLabel; }, COPY_FEEDBACK_MS);
+	}
+
+	const ZONE_TILE_COLS = 4;
+	const ZONE_TILE_W = 500;
+	const ZONE_TILE_H = 400;
+	const ZONE_TILE_PAD = 40;
+	const ZONE_TILE_MAX_ROWS = 10;
+	const ZONE_TILE_START_Y = 80;
+
 	/** Find an open spot in a zone for placing a new tile */
 	function findOpenSpotInZone(zone) {
-		const COLS = 4;
-		const tileW = 500, tileH = 400, pad = 40;
 		const existing = tiles.filter((t) => {
 			const cx = t.x + t.width / 2;
 			const cy = t.y + t.height / 2;
 			return cx >= zone.x && cx <= zone.x + zone.width
 				&& cy >= zone.y && cy <= zone.y + ZONE_H;
 		});
-		for (let row = 0; row < 10; row++) {
-			for (let c = 0; c < COLS; c++) {
-				const x = zone.x + pad + c * (tileW + pad);
-				const y = zone.y + 80 + row * (tileH + pad);
+		for (let row = 0; row < ZONE_TILE_MAX_ROWS; row++) {
+			for (let c = 0; c < ZONE_TILE_COLS; c++) {
+				const x = zone.x + ZONE_TILE_PAD + c * (ZONE_TILE_W + ZONE_TILE_PAD);
+				const y = zone.y + ZONE_TILE_START_Y + row * (ZONE_TILE_H + ZONE_TILE_PAD);
 				const overlaps = existing.some((t) =>
-					x < t.x + t.width && x + tileW > t.x &&
-					y < t.y + t.height && y + tileH > t.y
+					x < t.x + t.width && x + ZONE_TILE_W > t.x &&
+					y < t.y + t.height && y + ZONE_TILE_H > t.y
 				);
 				if (!overlaps) return { x, y };
 			}
 		}
-		return { x: zone.x + pad, y: zone.y + 80 };
+		return { x: zone.x + ZONE_TILE_PAD, y: zone.y + ZONE_TILE_START_Y };
 	}
 
 	function getActiveColumns() {
 		if (kanbanState.mode === "zone") {
-			// In zone mode, use zone-based columns stored separately
-			if (!kanbanState.zoneColumns) {
-				kanbanState.zoneColumns = ZONE_COLUMNS.map((z) => ({
-					id: z.id,
-					title: z.title,
-					cards: [],
-				}));
-			}
+			if (!kanbanState.zoneColumns) kanbanState.zoneColumns = createDefaultZoneColumns();
 			return kanbanState.zoneColumns;
 		}
 		return kanbanState.columns;
 	}
 
+	function createDefaultZoneColumns() {
+		return ZONE_COLUMNS.map((z) => ({ id: z.id, title: z.title, cards: [] }));
+	}
+
 	function switchKanbanMode(newMode) {
 		kanbanState.mode = newMode;
 		if (newMode === "zone" && !kanbanState.zoneColumns) {
-			kanbanState.zoneColumns = ZONE_COLUMNS.map((z) => ({
-				id: z.id,
-				title: z.title,
-				cards: [],
-			}));
+			kanbanState.zoneColumns = createDefaultZoneColumns();
 		}
 		expandedCardId = null;
 		renderKanban();
@@ -4869,10 +4874,7 @@ async function init() {
 		copyAllBtn.textContent = "Copy All";
 		copyAllBtn.title = "Copy all kanban content to clipboard";
 		copyAllBtn.addEventListener("click", () => {
-			const text = formatKanbanForCopy(activeCols);
-			navigator.clipboard.writeText(text);
-			copyAllBtn.textContent = "Copied!";
-			setTimeout(() => { copyAllBtn.textContent = "Copy All"; }, 1200);
+			copyWithFeedback(copyAllBtn, formatKanbanForCopy(activeCols), "Copy All");
 		});
 		modeBar.appendChild(copyAllBtn);
 
@@ -4937,10 +4939,7 @@ async function init() {
 				copyColBtn.title = `Copy ${col.title} cards`;
 				copyColBtn.addEventListener("click", (e) => {
 					e.stopPropagation();
-					const text = formatColumnForCopy(col);
-					navigator.clipboard.writeText(text);
-					copyColBtn.textContent = "Copied!";
-					setTimeout(() => { copyColBtn.textContent = "Copy"; }, 1200);
+					copyWithFeedback(copyColBtn, formatColumnForCopy(col), "Copy");
 				});
 				header.appendChild(copyColBtn);
 			}
