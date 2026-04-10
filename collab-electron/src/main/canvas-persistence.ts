@@ -66,6 +66,18 @@ export async function saveState(state: CanvasState): Promise<void> {
           && sp.drawing.length < 1000 && existing.scratchpad.drawing.length > 1000) {
         sp.drawing = existing.scratchpad.drawing;
       }
+      // Preserve kanban cards if new state has empty columns but existing has data
+      const kanban = stateAny.kanban as { columns?: unknown[]; zoneColumns?: unknown[] | null } | undefined;
+      if (kanban && existing.kanban) {
+        const hasCards = (cols: unknown[] | null | undefined) =>
+          Array.isArray(cols) && cols.some((c: any) => Array.isArray(c.cards) && c.cards.length > 0);
+        if (!hasCards(kanban.columns) && hasCards(existing.kanban.columns)) {
+          kanban.columns = existing.kanban.columns;
+        }
+        if (!hasCards(kanban.zoneColumns) && hasCards(existing.kanban.zoneColumns)) {
+          kanban.zoneColumns = existing.kanban.zoneColumns;
+        }
+      }
     } catch { /* ignore read errors */ }
   }
 
