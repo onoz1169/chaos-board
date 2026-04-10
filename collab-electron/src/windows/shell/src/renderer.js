@@ -4057,7 +4057,9 @@ async function init() {
 	// Drawing on scratchpad canvas
 	if (scratchpadCanvas && scratchpadCtx) {
 		scratchpadCanvas.addEventListener("pointerdown", (e) => {
-			if (scratchpadTool !== "pen" && scratchpadTool !== "eraser") return;
+			if (scratchpadTool !== "pen" && scratchpadTool !== "eraser") {
+				setScratchpadTool("pen");
+			}
 			spDrawing = true;
 			const rect = scratchpadCanvas.getBoundingClientRect();
 			spLastX = e.clientX - rect.left;
