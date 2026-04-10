@@ -3868,6 +3868,7 @@ async function init() {
 	const scratchpadSendCanvasBtn = document.getElementById("scratchpad-send-canvas");
 
 	let scratchpadTool = "text";
+	let spDrawingRestoring = false;  // true while async drawing restore is in progress
 	let spDrawing = false;
 	let spLastX = 0;
 	let spLastY = 0;
@@ -3880,7 +3881,8 @@ async function init() {
 		if (isScratchpadOpen && scratchpadEditor) {
 			spMemo.content = scratchpadEditor.innerHTML || "";
 		}
-		if (isScratchpadOpen && scratchpadCanvas && scratchpadCanvas.width > 0 && scratchpadCanvas.height > 0) {
+		// Don't read canvas while drawing restore is in progress (canvas may be blank)
+		if (isScratchpadOpen && !spDrawingRestoring && scratchpadCanvas && scratchpadCanvas.width > 0 && scratchpadCanvas.height > 0) {
 			try { spMemo.drawing = scratchpadCanvas.toDataURL(); } catch {}
 		}
 	}
@@ -4145,16 +4147,21 @@ async function init() {
 				setTimeout(restoreDrawing, 100);
 				return;
 			}
-			if (spMemo.drawing && scratchpadCtx && scratchpadCanvas) {
+			if (spMemo.drawing && scratchpadCanvas) {
+				spDrawingRestoring = true;
 				const img = new Image();
 				img.onload = () => {
-					// Set canvas to image size or wrap size, whichever is larger
-					const w = Math.max(wrap.clientWidth, img.width);
-					const h = Math.max(wrap.clientHeight, img.height);
-					scratchpadCanvas.width = w;
-					scratchpadCanvas.height = h;
-					scratchpadCtx.drawImage(img, 0, 0);
+					const ctx = scratchpadCanvas.getContext("2d");
+					if (ctx) {
+						const w = Math.max(wrap.clientWidth, img.width);
+						const h = Math.max(wrap.clientHeight, img.height);
+						scratchpadCanvas.width = w;
+						scratchpadCanvas.height = h;
+						ctx.drawImage(img, 0, 0);
+					}
+					spDrawingRestoring = false;
 				};
+				img.onerror = () => { spDrawingRestoring = false; };
 				img.src = spMemo.drawing;
 			} else {
 				resizeScratchpadCanvas();

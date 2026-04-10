@@ -49,16 +49,21 @@ export async function saveState(state: CanvasState): Promise<void> {
     await mkdir(STATE_DIR, { recursive: true });
   }
 
-  // Preserve scratchpad content if new state has empty content but existing file has data
+  // Preserve scratchpad content and drawing independently
   const stateAny = state as Record<string, unknown>;
   const sp = stateAny.scratchpad as { content?: string; drawing?: string } | undefined;
-  if (sp && !sp.content && existsSync(STATE_FILE)) {
+  if (sp && existsSync(STATE_FILE)) {
     try {
       const existing = JSON.parse(await readFile(STATE_FILE, "utf-8"));
-      if (existing.scratchpad?.content) {
+      if (!sp.content && existing.scratchpad?.content) {
         sp.content = existing.scratchpad.content;
       }
       if (!sp.drawing && existing.scratchpad?.drawing) {
+        sp.drawing = existing.scratchpad.drawing;
+      }
+      // Detect blank PNG (transparent canvas toDataURL) — preserve existing drawing
+      if (sp.drawing && existing.scratchpad?.drawing
+          && sp.drawing.length < 1000 && existing.scratchpad.drawing.length > 1000) {
         sp.drawing = existing.scratchpad.drawing;
       }
     } catch { /* ignore read errors */ }
