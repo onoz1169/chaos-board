@@ -4093,6 +4093,14 @@ async function init() {
 			spLastX = x;
 			spLastY = y;
 
+			// Auto-expand canvas when drawing near bottom
+			if (y > scratchpadCanvas.height - 40) {
+				const imgData = scratchpadCtx.getImageData(0, 0, scratchpadCanvas.width, scratchpadCanvas.height);
+				scratchpadCanvas.height += 300;
+				scratchpadCtx.putImageData(imgData, 0, 0);
+				const wrap = document.getElementById("scratchpad-canvas-wrap");
+				if (wrap) wrap.scrollTop = wrap.scrollHeight;
+			}
 		});
 
 		scratchpadCanvas.addEventListener("pointerup", () => {
