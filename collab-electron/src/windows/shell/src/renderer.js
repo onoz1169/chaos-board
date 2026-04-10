@@ -3952,11 +3952,10 @@ async function init() {
 
 	function resizeScratchpadCanvas() {
 		if (!scratchpadCanvas || !scratchpadBody || !scratchpadCtx) return;
+		const inner = document.getElementById("scratchpad-body-inner");
 		const rect = scratchpadBody.getBoundingClientRect();
-		// Use the larger of visible height or scroll height so pen strokes
-		// extend as far as the editor content
 		const w = rect.width;
-		const h = Math.max(rect.height, scratchpadBody.scrollHeight);
+		const h = inner ? inner.scrollHeight : Math.max(rect.height, scratchpadBody.scrollHeight);
 		const imgData = scratchpadCanvas.width > 0 && scratchpadCanvas.height > 0
 			? scratchpadCtx.getImageData(0, 0, scratchpadCanvas.width, scratchpadCanvas.height)
 			: null;
