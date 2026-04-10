@@ -1327,46 +1327,9 @@ async function init() {
 			},
 		});
 
-		// Drag from title bar AND from container border area
-		attachDrag(dom.titleBar, tile, {
-			viewport,
-			onUpdate: repositionAllTiles,
-			disablePointerEvents: (wvs) => {
-				for (const w of wvs) w.webview.style.pointerEvents = "none";
-			},
-			enablePointerEvents: (wvs) => {
-				for (const w of wvs) w.webview.style.pointerEvents = "";
-			},
-			getAllWebviews,
-			getGroupDragContext: () => {
-				// Collect tiles to move: selection + persistent group members
-				const dragIds = new Set();
-				if (isSelected(tile.id)) {
-					for (const st of getSelectedTiles()) dragIds.add(st.id);
-				}
-				// Always include persistent group members of the dragged tile
-				const pg = getGroupForTile(tile.id);
-				if (pg) {
-					for (const gid of pg.tileIds) dragIds.add(gid);
-				}
-				if (dragIds.size <= 1) return null;
-				return [...dragIds].map((id) => {
-					const t = getTile(id);
-					return t ? { tile: t, container: tileDOMs.get(id)?.container, startX: t.x, startY: t.y } : null;
-				}).filter(Boolean);
-			},
-			onShiftClick: (id) => {
-				toggleTileSelection(id);
-				syncSelectionVisuals();
-			},
-			onFocus: (id, e) => focusCanvasTile(id, e),
-			isSpaceHeld: () => spaceHeld,
-			contentOverlay: dom.contentOverlay,
-			isSelected: () => isSelected(tile.id),
-		});
-		// Sticky notes: also allow drag from content area (not just title bar)
-		if (tile.type === "text" && dom.contentArea) {
-			attachDrag(dom.contentArea, tile, {
+		// Shared drag options for a tile
+		function buildDragOpts(tile, dom) {
+			return {
 				viewport,
 				onUpdate: repositionAllTiles,
 				disablePointerEvents: (wvs) => {
@@ -1391,6 +1354,10 @@ async function init() {
 						return t ? { tile: t, container: tileDOMs.get(id)?.container, startX: t.x, startY: t.y } : null;
 					}).filter(Boolean);
 				},
+				onShiftClick: (id) => {
+					toggleTileSelection(id);
+					syncSelectionVisuals();
+				},
 				onDrop: () => {
 					updateZoneSummaries(tiles);
 					saveCanvasDebounced();
@@ -1400,7 +1367,15 @@ async function init() {
 				isSpaceHeld: () => spaceHeld,
 				contentOverlay: dom.contentOverlay,
 				isSelected: () => isSelected(tile.id),
-			});
+			};
+		}
+
+		// Drag from title bar
+		attachDrag(dom.titleBar, tile, buildDragOpts(tile, dom));
+
+		// Sticky notes: also drag from content area
+		if (tile.type === "text" && dom.contentArea) {
+			attachDrag(dom.contentArea, tile, buildDragOpts(tile, dom));
 		}
 
 		attachResize(
