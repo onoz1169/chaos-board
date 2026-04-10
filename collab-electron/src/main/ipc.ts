@@ -116,10 +116,10 @@ function forwardToWebview(
   );
 }
 
-const CLAUDE_MD_TEMPLATE = `# Collaborator Workspace
+const CLAUDE_MD_TEMPLATE = `# Chaos Board Workspace
 
-This is a Collaborator workspace. Files in the root are sources (notes, articles, transcripts).
-Files in \`.collaborator/\` are managed by the Collaborator agent.
+This is a Chaos Board workspace. Files in the root are sources (notes, articles, transcripts).
+Files in \`.collaborator/\` are managed by the Chaos Board agent.
 
 ## File types
 - Sources (root): note, article, transcript, pdf
@@ -252,9 +252,9 @@ function buildRpcBlock(): string {
   return [
     RPC_BLOCK_START,
     "",
-    "## Collaborator RPC",
+    "## Chaos Board RPC",
     "",
-    "The Collaborator desktop app exposes a JSON-RPC 2.0 server over a Unix domain socket.",
+    "The Chaos Board desktop app exposes a JSON-RPC 2.0 server over a Unix domain socket.",
     `Read the socket path from \`${socketPathFile}\`, then send newline-delimited JSON.`,
     "",
     "Call `rpc.discover` to list available methods:",
@@ -1151,7 +1151,7 @@ export function registerIpcHandlers(config: AppConfig): void {
     (params) => {
       const p = params as { title?: string; body: string };
       const note = new Notification({
-        title: p.title ?? "Collaborator",
+        title: p.title ?? "Chaos Board",
         body: p.body,
       });
       note.show();
@@ -1161,7 +1161,7 @@ export function registerIpcHandlers(config: AppConfig): void {
       description:
         "Show a native macOS notification",
       params: {
-        title: "(optional) Notification title, defaults to 'Collaborator'",
+        title: "(optional) Notification title, defaults to 'Chaos Board'",
         body: "Notification body text",
       },
     },
