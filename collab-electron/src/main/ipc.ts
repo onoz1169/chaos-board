@@ -136,20 +136,20 @@ Files without \`collab_reviewed: true\` are inbox items awaiting processing.
 
 const AGENT_NOTIFY_SCRIPT = `#!/bin/bash
 set -euo pipefail
-LOG="$HOME/.collaborator/hook-debug.log"
+LOG="$HOME/.chaos-board/hook-debug.log"
 INPUT=$(cat)
 echo "[$(date -Iseconds)] hook fired" >> "$LOG"
 echo "  raw input: $INPUT" >> "$LOG"
 EVENT=$(echo "$INPUT" | jq -r '.hook_event_name')
 
 # Discover the socket path from the breadcrumb file written by the
-# JSON-RPC server. This works for both dev (~/.collaborator/dev/)
-# and prod (~/.collaborator/) instances.
-SOCKET_PATH_FILE="$HOME/.collaborator/socket-path"
+# JSON-RPC server. This works for both dev (~/.chaos-board/dev/)
+# and prod (~/.chaos-board/) instances.
+SOCKET_PATH_FILE="$HOME/.chaos-board/socket-path"
 if [ -f "$SOCKET_PATH_FILE" ]; then
   SOCKET=$(cat "$SOCKET_PATH_FILE")
 else
-  SOCKET="$HOME/.collaborator/ipc.sock"
+  SOCKET="$HOME/.chaos-board/ipc.sock"
 fi
 
 if [ ! -S "$SOCKET" ]; then
@@ -248,7 +248,7 @@ const RPC_BLOCK_START = "<!-- collaborator:rpc-start -->";
 const RPC_BLOCK_END = "<!-- collaborator:rpc-end -->";
 
 function buildRpcBlock(): string {
-  const socketPathFile = join(homedir(), ".collaborator", "socket-path");
+  const socketPathFile = join(homedir(), ".chaos-board", "socket-path");
   return [
     RPC_BLOCK_START,
     "",

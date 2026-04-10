@@ -10,10 +10,10 @@ import { homedir } from "node:os";
 import { COLLAB_DIR } from "./paths";
 
 const SOCKET_PATH = join(COLLAB_DIR, "ipc.sock");
-// Write the breadcrumb to the base directory (~/.collaborator/)
+// Write the breadcrumb to the base directory (~/.chaos-board/)
 // so the hook script can discover the socket regardless of
 // whether the app is running in dev or prod mode.
-const BASE_DIR = join(homedir(), ".collaborator");
+const BASE_DIR = join(homedir(), ".chaos-board");
 const SOCKET_PATH_FILE = join(BASE_DIR, "socket-path");
 
 type MethodHandler = (

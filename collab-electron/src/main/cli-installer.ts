@@ -11,7 +11,7 @@ import { homedir } from "node:os";
 
 const INSTALL_DIR = join(homedir(), ".local", "bin");
 const INSTALL_PATH = join(INSTALL_DIR, "collab");
-const COLLAB_DIR = join(homedir(), ".collaborator");
+const COLLAB_DIR = join(homedir(), ".chaos-board");
 const HINT_MARKER = join(COLLAB_DIR, "cli-path-hinted");
 
 function getCliSource(): string {

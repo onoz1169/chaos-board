@@ -126,7 +126,7 @@ function uninstallSkill(id: AgentId): void {
 // -- plugin offered marker --
 
 function markerPath(): string {
-  return join(homedir(), ".collaborator", "canvas-plugin-offered");
+  return join(homedir(), ".chaos-board", "canvas-plugin-offered");
 }
 
 export function hasOfferedPlugin(): boolean {
@@ -134,7 +134,7 @@ export function hasOfferedPlugin(): boolean {
 }
 
 export function markPluginOffered(): void {
-  const dir = join(homedir(), ".collaborator");
+  const dir = join(homedir(), ".chaos-board");
   mkdirSync(dir, { recursive: true });
   writeFileSync(markerPath(), new Date().toISOString(), "utf-8");
 }
