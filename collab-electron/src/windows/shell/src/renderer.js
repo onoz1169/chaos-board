@@ -4108,12 +4108,23 @@ async function init() {
 		});
 	}
 
-	function openScratchpad() {
+	async function openScratchpad() {
 		if (!scratchpadOverlay) return;
 		isScratchpadOpen = true;
 		scratchpadOverlay.style.display = "";
 		scratchpadOverlay.classList.add("visible");
-		// Always restore memo content into editor (even if empty, to clear stale DOM)
+
+		// If spMemo is empty, try loading from disk (may not have been restored yet)
+		if (!spMemo.content) {
+			try {
+				const saved = await window.shellApi.canvasLoadState();
+				if (saved?.scratchpad?.content) {
+					spMemo.content = saved.scratchpad.content;
+					if (saved.scratchpad.drawing) spMemo.drawing = saved.scratchpad.drawing;
+				}
+			} catch {}
+		}
+
 		if (scratchpadEditor) {
 			scratchpadEditor.innerHTML = spMemo.content || "";
 		}
