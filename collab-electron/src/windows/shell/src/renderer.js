@@ -4093,6 +4093,19 @@ async function init() {
 
 			spLastX = x;
 			spLastY = y;
+
+			// Auto-expand canvas when drawing near bottom edge
+			const EXPAND_MARGIN = 40;
+			if (y > scratchpadCanvas.height - EXPAND_MARGIN) {
+				const imgData = scratchpadCtx.getImageData(0, 0, scratchpadCanvas.width, scratchpadCanvas.height);
+				scratchpadCanvas.height += 300;
+				scratchpadCtx.putImageData(imgData, 0, 0);
+				// Also grow the inner wrapper so scrollbar appears
+				const inner = document.getElementById("scratchpad-body-inner");
+				if (inner) inner.style.minHeight = scratchpadCanvas.height + "px";
+				// Scroll to keep stroke visible
+				scratchpadBody.scrollTop = scratchpadBody.scrollHeight;
+			}
 		});
 
 		scratchpadCanvas.addEventListener("pointerup", () => {
