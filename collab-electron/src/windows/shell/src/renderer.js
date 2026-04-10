@@ -3869,8 +3869,11 @@ async function init() {
 	// Memo is a single continuous document (spMemo declared at top of init())
 
 	function saveMemo() {
-		spMemo.content = scratchpadEditor?.innerHTML || "";
-		if (scratchpadCanvas && scratchpadCanvas.width > 0 && scratchpadCanvas.height > 0) {
+		// Only read from DOM when memo is visible — when hidden, innerHTML may be empty
+		if (isScratchpadOpen && scratchpadEditor) {
+			spMemo.content = scratchpadEditor.innerHTML || "";
+		}
+		if (isScratchpadOpen && scratchpadCanvas && scratchpadCanvas.width > 0 && scratchpadCanvas.height > 0) {
 			try { spMemo.drawing = scratchpadCanvas.toDataURL(); } catch {}
 		}
 	}
@@ -3943,11 +3946,15 @@ async function init() {
 	function resizeScratchpadCanvas() {
 		if (!scratchpadCanvas || !scratchpadBody || !scratchpadCtx) return;
 		const rect = scratchpadBody.getBoundingClientRect();
+		// Use the larger of visible height or scroll height so pen strokes
+		// extend as far as the editor content
+		const w = rect.width;
+		const h = Math.max(rect.height, scratchpadBody.scrollHeight);
 		const imgData = scratchpadCanvas.width > 0 && scratchpadCanvas.height > 0
 			? scratchpadCtx.getImageData(0, 0, scratchpadCanvas.width, scratchpadCanvas.height)
 			: null;
-		scratchpadCanvas.width = rect.width;
-		scratchpadCanvas.height = rect.height;
+		scratchpadCanvas.width = w;
+		scratchpadCanvas.height = h;
 		if (imgData) scratchpadCtx.putImageData(imgData, 0, 0);
 	}
 
@@ -4139,6 +4146,7 @@ async function init() {
 	if (scratchpadEditor) {
 		scratchpadEditor.addEventListener("input", () => {
 			updateWordCount();
+			resizeScratchpadCanvas();
 			saveCanvasDebounced();
 		});
 	}
