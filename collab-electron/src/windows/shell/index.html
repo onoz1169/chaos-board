@@ -191,9 +191,10 @@
 						<button type="button" class="scratchpad-tool-btn" data-tool="clear-drawing" title="Clear drawing">Clear</button>
 					</div>
 					<div id="scratchpad-body">
-						<div id="scratchpad-body-inner">
+						<div id="scratchpad-editor" contenteditable="true" spellcheck="true"></div>
+						<div id="scratchpad-canvas-section">
+							<div id="scratchpad-canvas-label">Drawing</div>
 							<canvas id="scratchpad-canvas"></canvas>
-							<div id="scratchpad-editor" contenteditable="true" spellcheck="true"></div>
 						</div>
 					</div>
 					<div id="scratchpad-footer">

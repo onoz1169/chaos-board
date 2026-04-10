@@ -3952,10 +3952,9 @@ async function init() {
 
 	function resizeScratchpadCanvas() {
 		if (!scratchpadCanvas || !scratchpadBody || !scratchpadCtx) return;
-		const inner = document.getElementById("scratchpad-body-inner");
-		const rect = scratchpadBody.getBoundingClientRect();
-		const w = rect.width;
-		const h = inner ? inner.scrollHeight : Math.max(rect.height, scratchpadBody.scrollHeight);
+		const section = document.getElementById("scratchpad-canvas-section");
+		const w = section ? section.clientWidth : scratchpadBody.clientWidth;
+		const h = 600;
 		const imgData = scratchpadCanvas.width > 0 && scratchpadCanvas.height > 0
 			? scratchpadCtx.getImageData(0, 0, scratchpadCanvas.width, scratchpadCanvas.height)
 			: null;
@@ -4099,11 +4098,8 @@ async function init() {
 			if (y > scratchpadCanvas.height - EXPAND_MARGIN) {
 				const imgData = scratchpadCtx.getImageData(0, 0, scratchpadCanvas.width, scratchpadCanvas.height);
 				scratchpadCanvas.height += 300;
+				scratchpadCanvas.style.height = scratchpadCanvas.height + "px";
 				scratchpadCtx.putImageData(imgData, 0, 0);
-				// Also grow the inner wrapper so scrollbar appears
-				const inner = document.getElementById("scratchpad-body-inner");
-				if (inner) inner.style.minHeight = scratchpadCanvas.height + "px";
-				// Scroll to keep stroke visible
 				scratchpadBody.scrollTop = scratchpadBody.scrollHeight;
 			}
 		});
@@ -4176,7 +4172,6 @@ async function init() {
 	if (scratchpadEditor) {
 		scratchpadEditor.addEventListener("input", () => {
 			updateWordCount();
-			resizeScratchpadCanvas();
 			saveCanvasDebounced();
 		});
 	}
