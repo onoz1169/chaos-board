@@ -4122,11 +4122,11 @@ async function init() {
 		scratchpadOverlay.classList.add("visible");
 
 		// If spMemo is empty, try loading from disk (may not have been restored yet)
-		if (!spMemo.content) {
+		if (!spMemo.content && !spMemo.drawing) {
 			try {
 				const saved = await window.shellApi.canvasLoadState();
-				if (saved?.scratchpad?.content) {
-					spMemo.content = saved.scratchpad.content;
+				if (saved?.scratchpad) {
+					if (saved.scratchpad.content) spMemo.content = saved.scratchpad.content;
 					if (saved.scratchpad.drawing) spMemo.drawing = saved.scratchpad.drawing;
 				}
 			} catch {}
@@ -4139,6 +4139,14 @@ async function init() {
 		updateWordCount();
 		setTimeout(() => {
 			resizeScratchpadCanvas();
+			// Restore drawing onto canvas after resize
+			if (spMemo.drawing && scratchpadCtx && scratchpadCanvas) {
+				const img = new Image();
+				img.onload = () => {
+					scratchpadCtx.drawImage(img, 0, 0);
+				};
+				img.src = spMemo.drawing;
+			}
 			if (scratchpadTool === "text") scratchpadEditor?.focus();
 		}, 50);
 	}
