@@ -10,8 +10,6 @@
 
 <body>
 	<div id="titlebar"></div>
-	<span id="alpha-label">COLLABORATOR ALPHA &#x2022; BEWARE BUGS <a
-			href="https://github.com/collaborator-ai/collab-public/issues/new" target="_blank">[<span>CREATE ISSUE</span>]</a></span>
 
 	<button type="button" id="nav-toggle" class="panel-toggle" aria-pressed="true" aria-label="Hide Navigator"
 		title="Hide Navigator"></button>
@@ -109,6 +107,9 @@
 		<button type="button" class="pen-dock-icon dock-launch-icon" id="launch-all-btn" data-tooltip="Launch All (Cmd+Shift+L)">
 			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
 		</button>
+		<button type="button" class="pen-dock-icon dock-scratchpad-icon" id="tool-scratchpad-btn" data-tooltip="Memo (`)">
+			<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+		</button>
 		<button type="button" class="pen-dock-icon dock-help-icon" id="help-shortcut-btn" data-tooltip="Shortcuts (?)">
 			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 9a3 3 0 015.12 1c0 2-3.12 2.5-3.12 4"/><circle cx="12" cy="17" r="0.5" fill="currentColor"/></svg>
 		</button>
@@ -149,6 +150,27 @@
 	<div id="loading-overlay">
 		<div id="loading-spinner"></div>
 		<div id="loading-status">Initializing&#x2026;</div>
+	</div>
+
+	<div id="scratchpad-overlay">
+		<div id="scratchpad-backdrop"></div>
+		<div id="scratchpad-modal">
+			<div id="scratchpad-header">
+				<span>Scratchpad</span>
+				<button type="button" id="scratchpad-close">&times;</button>
+			</div>
+			<div id="scratchpad-toolbar">
+				<button type="button" class="scratchpad-tool-btn scratchpad-tool-active" data-tool="text" title="Text">T</button>
+				<button type="button" class="scratchpad-tool-btn" data-tool="pen" title="Pen">P</button>
+				<button type="button" class="scratchpad-tool-btn" data-tool="eraser" title="Eraser">E</button>
+				<span class="scratchpad-separator"></span>
+				<button type="button" class="scratchpad-tool-btn" data-tool="clear-drawing" title="Clear drawing">Clear</button>
+			</div>
+			<div id="scratchpad-body">
+				<canvas id="scratchpad-canvas"></canvas>
+				<div id="scratchpad-editor" contenteditable="true" spellcheck="true"></div>
+			</div>
+		</div>
 	</div>
 
 	<script type="module" src="./src/renderer.js"></script>

@@ -16,7 +16,7 @@ import {
 	fromJSON as groupsFromJSON,
 } from "./group-state.js";
 import { initGroupLayer, renderGroups } from "./group-renderer.js";
-import { initZoneLayer, repositionZones, getTilesInZone, getZoneAtPoint, flashZone, getZones, getZoneCenter, updateZoneSummaries } from "./zone-renderer.js";
+import { initZoneLayer, repositionZones, getTilesInZone, getZoneAtPoint, flashZone, getZones, getZoneCenter, updateZoneSummaries, ZONE_H, W1H_ROW_H, TOTAL_ZONE_H, W1H_LABELS } from "./zone-renderer.js";
 import { strokes as penStrokes, clearStrokes as clearPenStrokes, undoStroke, toJSON as penStrokesToJSON, fromJSON as penStrokesFromJSON } from "./pen-stroke-state.js";
 import { initPenOverlay, redraw as redrawPenOverlay, togglePenMode, isPenMode, setPenMode, setPenTool } from "./pen-overlay.js";
 import { connections, addConnection, removeConnection, getConnectionsForTile, toJSON as connectionsToJSON, fromJSON as connectionsFromJSON } from "./connection-state.js";
@@ -648,6 +648,7 @@ async function init() {
 	let lastNonModalSurface = "canvas";
 	let settingsModalOpen = false;
 	let focusedTileId = null;
+	let isScratchpadOpen = false;
 
 	// -- Canvas persistence --
 
@@ -685,6 +686,14 @@ async function init() {
 			groups: groupsToJSON(),
 			penStrokes: penStrokesToJSON(),
 			connections: connectionsToJSON(),
+			scratchpad: {
+				content: document.getElementById("scratchpad-editor")?.innerHTML || "",
+				drawing: (() => {
+					const c = document.getElementById("scratchpad-canvas");
+					if (!c || c.width === 0 || c.height === 0) return "";
+					try { return c.toDataURL(); } catch { return ""; }
+				})(),
+			},
 		};
 	}
 
@@ -1828,6 +1837,161 @@ async function init() {
 		});
 	}
 
+	// -- Copy zone info helpers --
+
+	/**
+	 * Get structured content for all tiles in a zone.
+	 * @param {string} zoneId
+	 * @param {"all"|"5w1h"} section
+	 * @returns {Promise<{ zone: object, tiles: Array<{ tile: object, content: string, w1hRow: string|null }> }>}
+	 */
+	async function getZoneTileContents(zoneId, section) {
+		const zones = getZones();
+		const zone = zones.find((z) => z.id === zoneId);
+		if (!zone) return { zone: null, tiles: [] };
+
+		const tileIds = getTilesInZone(zoneId, tiles);
+		const results = [];
+
+		for (const tileId of tileIds) {
+			const tile = tiles.find(t => t.id === tileId);
+			if (!tile) continue;
+
+			const centerY = tile.y + tile.height / 2;
+			const w1hStart = zone.y + ZONE_H;
+			const isIn5w1h = centerY >= w1hStart && centerY <= zone.y + TOTAL_ZONE_H;
+
+			// Determine 5W1H row if tile is in the strip
+			let w1hRow = null;
+			if (isIn5w1h) {
+				const rowIndex = Math.floor((centerY - w1hStart) / W1H_ROW_H);
+				w1hRow = W1H_LABELS[Math.min(rowIndex, W1H_LABELS.length - 1)];
+			}
+
+			// Filter based on section
+			if (section === "5w1h" && !isIn5w1h) continue;
+
+			// Get content based on tile type
+			let content = "";
+			const dom = tileDOMs.get(tileId);
+
+			try {
+				if (tile.type === "text") {
+					// Sticky note
+					const textEl = dom?.contentArea?.querySelector(".sticky-text");
+					content = textEl ? textEl.textContent || "" : (tile.content || "");
+				} else if (tile.type === "term") {
+					// Terminal — read xterm buffer via webview executeJavaScript
+					if (dom?.webview) {
+						try {
+							content = await dom.webview.executeJavaScript(`
+								(() => {
+									try {
+										const term = window.__xterm;
+										if (!term) return '[terminal not ready]';
+										const buf = term.buffer.active;
+										const lines = [];
+										for (let i = 0; i < buf.length; i++) {
+											const line = buf.getLine(i);
+											if (line) lines.push(line.translateToString(true));
+										}
+										return lines.join('\\n').trimEnd();
+									} catch (e) {
+										return '[error reading terminal: ' + e.message + ']';
+									}
+								})()
+							`);
+						} catch {
+							content = "[terminal webview not accessible]";
+						}
+					} else {
+						content = "[terminal not loaded]";
+					}
+				} else if (tile.type === "shape") {
+					// Shape tile
+					const textEl = dom?.container?.querySelector(".shape-text");
+					content = textEl ? textEl.textContent || "" : (tile.content || "");
+				} else if (tile.type === "browser") {
+					// Browser tile
+					content = `URL: ${tile.url || "(none)"}`;
+					if (tile.label) content += `\nLabel: ${tile.label}`;
+				} else if (tile.type === "note" || tile.type === "code") {
+					// File-based tiles
+					content = `File: ${tile.filePath || "(none)"}`;
+					if (tile.label) content += `\nLabel: ${tile.label}`;
+				} else if (tile.type === "image") {
+					content = `Image: ${tile.filePath || "(none)"}`;
+				} else if (tile.type === "graph") {
+					content = `Graph: ${tile.folderPath || "(none)"}`;
+				}
+			} catch {
+				content = "[error reading tile content]";
+			}
+
+			results.push({ tile, content, w1hRow });
+		}
+
+		return { zone, tiles: results };
+	}
+
+	/**
+	 * Format zone tile contents as readable text.
+	 * @param {object} data - output from getZoneTileContents
+	 * @param {"all"|"5w1h"} section
+	 * @returns {string}
+	 */
+	function formatZoneInfo(data, section) {
+		if (!data.zone) return "No zone found.";
+
+		const typeLabels = {
+			term: "Terminal", text: "Sticky", shape: "Shape",
+			browser: "Browser", note: "Note", code: "Code",
+			image: "Image", graph: "Graph",
+		};
+
+		const lines = [];
+		lines.push(`=== ${data.zone.label} Zone ===`);
+		lines.push("");
+
+		if (section === "all") {
+			// Workspace area tiles (non-5W1H)
+			const workspaceTiles = data.tiles.filter((t) => !t.w1hRow);
+			for (const { tile, content } of workspaceTiles) {
+				const typeLabel = typeLabels[tile.type] || tile.type;
+				const name = tile.label || getTileLabel(tile).name || "";
+				const cwdPart = tile.cwd ? ` (${tile.cwd})` : "";
+				lines.push(`[${typeLabel}] ${name}${cwdPart}`);
+				if (content) {
+					lines.push(content);
+				}
+				lines.push("");
+			}
+		}
+
+		// 5W1H section
+		const w1hTiles = data.tiles.filter((t) => t.w1hRow);
+		if (w1hTiles.length > 0) {
+			lines.push("--- 5W1H ---");
+			for (const label of W1H_LABELS) {
+				const rowTiles = w1hTiles.filter((t) => t.w1hRow === label);
+				if (rowTiles.length === 0) continue;
+				lines.push(`${label}:`);
+				for (const { tile, content } of rowTiles) {
+					const typeLabel = typeLabels[tile.type] || tile.type;
+					const name = tile.label || getTileLabel(tile).name || "";
+					const cwdPart = tile.cwd ? ` (${tile.cwd})` : "";
+					lines.push(`  [${typeLabel}] ${name}${cwdPart}`);
+					if (content) {
+						const indented = content.split("\n").map((l) => `  ${l}`).join("\n");
+						lines.push(indented);
+					}
+				}
+			}
+		}
+
+		return lines.join("\n").trimEnd();
+	}
+
 	canvasEl.addEventListener("contextmenu", async (e) => {
 		if (
 			e.target !== canvasEl && e.target !== gridCanvas &&
@@ -1841,6 +2005,9 @@ async function init() {
 		const screenY = e.clientY - rect.top;
 		const cx = (screenX - canvasX) / canvasScale;
 		const cy = (screenY - canvasY) / canvasScale;
+
+		// Check if right-click is inside a zone
+		const clickedZone = getZoneAtPoint(cx, cy);
 
 		const menuItems = [
 			{ id: "search-tiles", label: "Search tiles (\u2318K)" },
@@ -1858,6 +2025,14 @@ async function init() {
 			{ id: "new-shape-arrow", label: "→ Arrow" },
 			{ id: "new-shape-line", label: "─ Line" },
 		];
+
+		// Add zone copy options if right-clicked inside a zone
+		if (clickedZone) {
+			menuItems.push({ separator: true });
+			menuItems.push({ id: "copy-zone-info", label: `Copy zone info (${clickedZone.label})` });
+			menuItems.push({ id: "copy-zone-5w1h", label: `Copy zone 5W1H (${clickedZone.label})` });
+		}
+
 		const selTiles = getSelectedTiles();
 		if (selTiles.length >= 2 || (selTiles.length > 0 && selTiles.some((t) => getGroupForTile(t.id)))) {
 			menuItems.push({ separator: true });
@@ -1870,7 +2045,17 @@ async function init() {
 		}
 		const selected = await showCanvasContextMenu(e.clientX, e.clientY, menuItems);
 
-		if (selected === "search-tiles") {
+		if (selected === "copy-zone-info" && clickedZone) {
+			const data = await getZoneTileContents(clickedZone.id, "all");
+			const text = formatZoneInfo(data, "all");
+			await navigator.clipboard.writeText(text);
+			flashZone(clickedZone.id);
+		} else if (selected === "copy-zone-5w1h" && clickedZone) {
+			const data = await getZoneTileContents(clickedZone.id, "5w1h");
+			const text = formatZoneInfo(data, "5w1h");
+			await navigator.clipboard.writeText(text);
+			flashZone(clickedZone.id);
+		} else if (selected === "search-tiles") {
 			if (window.__openTileSearch) window.__openTileSearch();
 		} else if (selected === "jump-zone") {
 			if (window.__openZoneJumpPalette) window.__openZoneJumpPalette();
@@ -2317,6 +2502,27 @@ async function init() {
 		if (savedState.connections) {
 			connectionsFromJSON(savedState.connections);
 			renderConnections(connections, tiles, canvasX, canvasY, canvasScale);
+		}
+
+		// Restore scratchpad
+		if (savedState.scratchpad) {
+			if (savedState.scratchpad.content) {
+				const scratchpadEl = document.getElementById("scratchpad-editor");
+				if (scratchpadEl) scratchpadEl.innerHTML = savedState.scratchpad.content;
+			}
+			if (savedState.scratchpad.drawing) {
+				const spCanvas = document.getElementById("scratchpad-canvas");
+				const spCtx = spCanvas ? spCanvas.getContext("2d") : null;
+				if (spCtx) {
+					const img = new Image();
+					img.onload = () => {
+						spCanvas.width = img.width;
+						spCanvas.height = img.height;
+						spCtx.drawImage(img, 0, 0);
+					};
+					img.src = savedState.scratchpad.drawing;
+				}
+			}
 		}
 	}
 
@@ -3534,6 +3740,183 @@ async function init() {
 	window.addEventListener("beforeunload", () => {
 		saveCanvasImmediate();
 	});
+
+	// -- Scratchpad overlay --
+
+	const scratchpadOverlay = document.getElementById("scratchpad-overlay");
+	const scratchpadBackdrop = document.getElementById("scratchpad-backdrop");
+	const scratchpadCloseBtn = document.getElementById("scratchpad-close");
+	const scratchpadEditor = document.getElementById("scratchpad-editor");
+	const scratchpadDockBtn = document.getElementById("tool-scratchpad-btn");
+	const scratchpadCanvas = document.getElementById("scratchpad-canvas");
+	const scratchpadBody = document.getElementById("scratchpad-body");
+	const scratchpadCtx = scratchpadCanvas ? scratchpadCanvas.getContext("2d") : null;
+
+	let scratchpadTool = "text"; // "text" | "pen" | "eraser"
+	let spDrawing = false;
+	let spLastX = 0;
+	let spLastY = 0;
+
+	function resizeScratchpadCanvas() {
+		if (!scratchpadCanvas || !scratchpadBody) return;
+		const rect = scratchpadBody.getBoundingClientRect();
+		// Save current drawing
+		const imgData = scratchpadCanvas.width > 0 && scratchpadCanvas.height > 0
+			? scratchpadCtx.getImageData(0, 0, scratchpadCanvas.width, scratchpadCanvas.height)
+			: null;
+		scratchpadCanvas.width = rect.width;
+		scratchpadCanvas.height = rect.height;
+		if (imgData) scratchpadCtx.putImageData(imgData, 0, 0);
+	}
+
+	function setScratchpadTool(tool) {
+		scratchpadTool = tool;
+		if (!scratchpadBody) return;
+		scratchpadBody.classList.remove("tool-text", "tool-pen", "tool-eraser");
+		scratchpadBody.classList.add("tool-" + tool);
+		// Update active button
+		document.querySelectorAll(".scratchpad-tool-btn").forEach(btn => {
+			btn.classList.toggle("scratchpad-tool-active", btn.dataset.tool === tool);
+		});
+	}
+
+	// Toolbar click handler
+	document.querySelectorAll(".scratchpad-tool-btn").forEach(btn => {
+		btn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			const tool = btn.dataset.tool;
+			if (tool === "clear-drawing") {
+				if (scratchpadCtx && scratchpadCanvas) {
+					scratchpadCtx.clearRect(0, 0, scratchpadCanvas.width, scratchpadCanvas.height);
+					saveCanvasDebounced();
+				}
+				return;
+			}
+			setScratchpadTool(tool);
+		});
+	});
+
+	// Drawing on scratchpad canvas
+	if (scratchpadCanvas && scratchpadCtx) {
+		scratchpadCanvas.addEventListener("pointerdown", (e) => {
+			if (scratchpadTool !== "pen" && scratchpadTool !== "eraser") return;
+			spDrawing = true;
+			const rect = scratchpadCanvas.getBoundingClientRect();
+			spLastX = e.clientX - rect.left;
+			spLastY = e.clientY - rect.top;
+			scratchpadCanvas.setPointerCapture(e.pointerId);
+		});
+
+		scratchpadCanvas.addEventListener("pointermove", (e) => {
+			if (!spDrawing) return;
+			const rect = scratchpadCanvas.getBoundingClientRect();
+			const x = e.clientX - rect.left;
+			const y = e.clientY - rect.top;
+
+			scratchpadCtx.save();
+			if (scratchpadTool === "eraser") {
+				scratchpadCtx.globalCompositeOperation = "destination-out";
+				scratchpadCtx.lineWidth = 20;
+			} else {
+				scratchpadCtx.globalCompositeOperation = "source-over";
+				scratchpadCtx.strokeStyle = "#ffffff";
+				scratchpadCtx.lineWidth = 3;
+			}
+			scratchpadCtx.lineCap = "round";
+			scratchpadCtx.lineJoin = "round";
+			scratchpadCtx.beginPath();
+			scratchpadCtx.moveTo(spLastX, spLastY);
+			scratchpadCtx.lineTo(x, y);
+			scratchpadCtx.stroke();
+			scratchpadCtx.restore();
+
+			spLastX = x;
+			spLastY = y;
+		});
+
+		scratchpadCanvas.addEventListener("pointerup", () => {
+			if (spDrawing) {
+				spDrawing = false;
+				saveCanvasDebounced();
+			}
+		});
+
+		scratchpadCanvas.addEventListener("pointercancel", () => {
+			spDrawing = false;
+		});
+	}
+
+	function openScratchpad() {
+		if (!scratchpadOverlay) return;
+		isScratchpadOpen = true;
+		scratchpadOverlay.classList.add("visible");
+		setScratchpadTool(scratchpadTool);
+		setTimeout(() => {
+			resizeScratchpadCanvas();
+			if (scratchpadTool === "text") scratchpadEditor?.focus();
+		}, 50);
+	}
+
+	function closeScratchpad() {
+		if (!scratchpadOverlay) return;
+		isScratchpadOpen = false;
+		scratchpadOverlay.classList.remove("visible");
+		saveCanvasDebounced();
+	}
+
+	function toggleScratchpad() {
+		if (isScratchpadOpen) {
+			closeScratchpad();
+		} else {
+			openScratchpad();
+		}
+	}
+
+	if (scratchpadCloseBtn) scratchpadCloseBtn.addEventListener("click", closeScratchpad);
+	if (scratchpadBackdrop) scratchpadBackdrop.addEventListener("click", closeScratchpad);
+	if (scratchpadDockBtn) {
+		scratchpadDockBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+		scratchpadDockBtn.addEventListener("click", toggleScratchpad);
+	}
+
+	// Auto-save on input (debounced)
+	if (scratchpadEditor) {
+		scratchpadEditor.addEventListener("input", () => {
+			saveCanvasDebounced();
+		});
+	}
+
+	// Keyboard: backtick to toggle, Escape to close
+	window.addEventListener("keydown", (e) => {
+		// Close scratchpad with Escape
+		if (e.key === "Escape" && isScratchpadOpen) {
+			e.preventDefault();
+			e.stopPropagation();
+			closeScratchpad();
+			return;
+		}
+
+		// Backtick toggle (only when not editing text elsewhere)
+		if (e.key === "`" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+			if (isScratchpadOpen) {
+				e.preventDefault();
+				closeScratchpad();
+				return;
+			}
+			const focused = document.activeElement;
+			const isEditing = focused && (
+				focused.isContentEditable ||
+				focused.tagName === "INPUT" ||
+				focused.tagName === "TEXTAREA" ||
+				focused.closest?.("webview")
+			);
+			if (!isEditing) {
+				e.preventDefault();
+				openScratchpad();
+				return;
+			}
+		}
+	}, true); // capture phase so it fires before other handlers
 }
 
 async function checkFirstLaunchDialog() {
@@ -3708,6 +4091,7 @@ init();
 		{ keys: "\u2318K", desc: "Search tiles by name" },
 		{ keys: "1-5", desc: "Jump to zone (no selection)" },
 		{ keys: "\u2318\u21E7A", desc: "Auto-layout grid" },
+		{ keys: "`", desc: "Toggle scratchpad" },
 	];
 
 	// Populate rows

@@ -43,6 +43,9 @@ function TerminalTab({ sessionId, visible, restored, scrollbackData }: TerminalT
 		term.open(containerRef.current);
 		fitRef.current = fit;
 
+		// Expose terminal instance on window for external buffer reading
+		(window as any).__xterm = term;
+
 		const unicode11 = new Unicode11Addon();
 		term.loadAddon(unicode11);
 		term.unicode.activeVersion = "11";

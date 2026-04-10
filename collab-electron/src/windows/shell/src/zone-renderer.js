@@ -10,12 +10,12 @@
  *   WHY | WHAT | WHO | WHERE | WHEN | HOW
  */
 
-const ZONE_W = 4200;
-const ZONE_GAP = 500;
-const ZONE_H = 4000;
-const W1H_ROW_H = 400; // height of each 5W1H row
-const W1H_STRIP_H = W1H_ROW_H * 6; // 6 rows stacked vertically
-const TOTAL_ZONE_H = ZONE_H + W1H_STRIP_H;
+export const ZONE_W = 4200;
+export const ZONE_GAP = 500;
+export const ZONE_H = 4000;
+export const W1H_ROW_H = 400; // height of each 5W1H row
+export const W1H_STRIP_H = W1H_ROW_H * 6; // 6 rows stacked vertically
+export const TOTAL_ZONE_H = ZONE_H + W1H_STRIP_H;
 
 const COL0 = 40;
 const COL1 = COL0 + ZONE_W + ZONE_GAP;
@@ -25,7 +25,7 @@ const COL4 = COL3 + ZONE_W + ZONE_GAP;
 
 const ROW = 40;
 
-const W1H_LABELS = ["WHY", "WHAT", "WHO", "WHERE", "WHEN", "HOW"];
+export const W1H_LABELS = ["WHY", "WHAT", "WHO", "WHERE", "WHEN", "HOW"];
 
 const ZONES = [
 	{
