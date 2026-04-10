@@ -3951,10 +3951,11 @@ async function init() {
 	}
 
 	function resizeScratchpadCanvas() {
-		if (!scratchpadCanvas || !scratchpadBody || !scratchpadCtx) return;
-		const section = document.getElementById("scratchpad-canvas-section");
-		const w = section ? section.clientWidth : scratchpadBody.clientWidth;
-		const h = 600;
+		if (!scratchpadCanvas || !scratchpadCtx) return;
+		const wrap = document.getElementById("scratchpad-canvas-wrap");
+		if (!wrap) return;
+		const w = wrap.clientWidth;
+		const h = wrap.clientHeight;
 		const imgData = scratchpadCanvas.width > 0 && scratchpadCanvas.height > 0
 			? scratchpadCtx.getImageData(0, 0, scratchpadCanvas.width, scratchpadCanvas.height)
 			: null;
@@ -3965,9 +3966,6 @@ async function init() {
 
 	function setScratchpadTool(tool) {
 		scratchpadTool = tool;
-		if (!scratchpadBody) return;
-		scratchpadBody.classList.remove("tool-text", "tool-pen", "tool-eraser");
-		scratchpadBody.classList.add("tool-" + tool);
 		document.querySelectorAll(".scratchpad-tool-btn").forEach(btn => {
 			btn.classList.toggle("scratchpad-tool-active", btn.dataset.tool === tool);
 		});
@@ -4093,15 +4091,6 @@ async function init() {
 			spLastX = x;
 			spLastY = y;
 
-			// Auto-expand canvas when drawing near bottom edge
-			const EXPAND_MARGIN = 40;
-			if (y > scratchpadCanvas.height - EXPAND_MARGIN) {
-				const imgData = scratchpadCtx.getImageData(0, 0, scratchpadCanvas.width, scratchpadCanvas.height);
-				scratchpadCanvas.height += 300;
-				scratchpadCanvas.style.height = scratchpadCanvas.height + "px";
-				scratchpadCtx.putImageData(imgData, 0, 0);
-				scratchpadBody.scrollTop = scratchpadBody.scrollHeight;
-			}
 		});
 
 		scratchpadCanvas.addEventListener("pointerup", () => {
