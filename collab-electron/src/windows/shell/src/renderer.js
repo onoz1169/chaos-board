@@ -4122,7 +4122,7 @@ async function init() {
 		scratchpadOverlay.classList.add("visible");
 
 		// If spMemo is empty, try loading from disk (may not have been restored yet)
-		if (!spMemo.content && !spMemo.drawing) {
+		if (!spMemo.content || !spMemo.drawing) {
 			try {
 				const saved = await window.shellApi.canvasLoadState();
 				if (saved?.scratchpad) {
@@ -4142,17 +4142,22 @@ async function init() {
 		function restoreDrawing() {
 			const wrap = document.getElementById("scratchpad-canvas-wrap");
 			if (!wrap || wrap.clientHeight === 0) {
-				// Layout not ready yet, retry
 				setTimeout(restoreDrawing, 100);
 				return;
 			}
-			resizeScratchpadCanvas();
 			if (spMemo.drawing && scratchpadCtx && scratchpadCanvas) {
 				const img = new Image();
 				img.onload = () => {
+					// Set canvas to image size or wrap size, whichever is larger
+					const w = Math.max(wrap.clientWidth, img.width);
+					const h = Math.max(wrap.clientHeight, img.height);
+					scratchpadCanvas.width = w;
+					scratchpadCanvas.height = h;
 					scratchpadCtx.drawImage(img, 0, 0);
 				};
 				img.src = spMemo.drawing;
+			} else {
+				resizeScratchpadCanvas();
 			}
 		}
 		setTimeout(() => {
