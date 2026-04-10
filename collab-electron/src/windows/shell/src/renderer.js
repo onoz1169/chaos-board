@@ -4137,9 +4137,16 @@ async function init() {
 		}
 		setScratchpadTool(scratchpadTool);
 		updateWordCount();
-		setTimeout(() => {
+
+		// Wait for layout to settle, then resize canvas and restore drawing
+		function restoreDrawing() {
+			const wrap = document.getElementById("scratchpad-canvas-wrap");
+			if (!wrap || wrap.clientHeight === 0) {
+				// Layout not ready yet, retry
+				setTimeout(restoreDrawing, 100);
+				return;
+			}
 			resizeScratchpadCanvas();
-			// Restore drawing onto canvas after resize
 			if (spMemo.drawing && scratchpadCtx && scratchpadCanvas) {
 				const img = new Image();
 				img.onload = () => {
@@ -4147,6 +4154,9 @@ async function init() {
 				};
 				img.src = spMemo.drawing;
 			}
+		}
+		setTimeout(() => {
+			restoreDrawing();
 			if (scratchpadTool === "text") scratchpadEditor?.focus();
 		}, 50);
 	}
