@@ -454,6 +454,10 @@ async function init() {
 		_prefCache["panel-visible-nav"] = prefNavVisible;
 	}
 
+	// Scratchpad entry state (must be declared early — used by getCanvasStateForSave)
+	let spEntries = {};
+	let spCurrentKey = null;
+
 	// DOM elements
 	const panelNav = document.getElementById("panel-nav");
 	const panelViewer = document.getElementById("panel-viewer");
@@ -686,14 +690,7 @@ async function init() {
 			groups: groupsToJSON(),
 			penStrokes: penStrokesToJSON(),
 			connections: connectionsToJSON(),
-			scratchpad: {
-				content: document.getElementById("scratchpad-editor")?.innerHTML || "",
-				drawing: (() => {
-					const c = document.getElementById("scratchpad-canvas");
-					if (!c || c.width === 0 || c.height === 0) return "";
-					try { return c.toDataURL(); } catch { return ""; }
-				})(),
-			},
+			scratchpad: getScratchpadStateForSave(),
 		};
 	}
 
@@ -2506,23 +2503,7 @@ async function init() {
 
 		// Restore scratchpad
 		if (savedState.scratchpad) {
-			if (savedState.scratchpad.content) {
-				const scratchpadEl = document.getElementById("scratchpad-editor");
-				if (scratchpadEl) scratchpadEl.innerHTML = savedState.scratchpad.content;
-			}
-			if (savedState.scratchpad.drawing) {
-				const spCanvas = document.getElementById("scratchpad-canvas");
-				const spCtx = spCanvas ? spCanvas.getContext("2d") : null;
-				if (spCtx) {
-					const img = new Image();
-					img.onload = () => {
-						spCanvas.width = img.width;
-						spCanvas.height = img.height;
-						spCtx.drawImage(img, 0, 0);
-					};
-					img.src = savedState.scratchpad.drawing;
-				}
-			}
+			restoreScratchpadState(savedState.scratchpad);
 		}
 	}
 
@@ -3741,8 +3722,7 @@ async function init() {
 		saveCanvasImmediate();
 	});
 
-	// -- Scratchpad overlay --
-
+	// -- Memo (Scratchpad) overlay --
 	const scratchpadOverlay = document.getElementById("scratchpad-overlay");
 	const scratchpadBackdrop = document.getElementById("scratchpad-backdrop");
 	const scratchpadCloseBtn = document.getElementById("scratchpad-close");
@@ -3751,16 +3731,176 @@ async function init() {
 	const scratchpadCanvas = document.getElementById("scratchpad-canvas");
 	const scratchpadBody = document.getElementById("scratchpad-body");
 	const scratchpadCtx = scratchpadCanvas ? scratchpadCanvas.getContext("2d") : null;
+	const scratchpadEntryList = document.getElementById("scratchpad-entry-list");
+	const scratchpadNewEntryBtn = document.getElementById("scratchpad-new-entry");
+	const scratchpadWordcount = document.getElementById("scratchpad-wordcount");
+	const scratchpadCopyBtn = document.getElementById("scratchpad-copy");
+	const scratchpadSendCanvasBtn = document.getElementById("scratchpad-send-canvas");
 
-	let scratchpadTool = "text"; // "text" | "pen" | "eraser"
+	let scratchpadTool = "text";
 	let spDrawing = false;
 	let spLastX = 0;
 	let spLastY = 0;
+	let spPenColor = "#ffffff";
+
+	// Entry management: { entries: { "2026-04-10": { content, drawing }, ... }, currentEntry: "2026-04-10" }
+	// (spEntries and spCurrentKey are declared near the top of init())
+
+	function todayKey() {
+		const d = new Date();
+		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+	}
+
+	function formatEntryLabel(key) {
+		const [y, m, d] = key.split("-");
+		const today = todayKey();
+		const label = `${m}/${d}`;
+		return key === today ? `${label} (today)` : label;
+	}
+
+	function getEntryPreview(entry) {
+		if (!entry || !entry.content) return "";
+		const tmp = document.createElement("div");
+		tmp.innerHTML = entry.content;
+		const text = tmp.textContent || "";
+		return text.slice(0, 40).trim();
+	}
+
+	function saveCurrentEntry() {
+		if (!spCurrentKey) return;
+		if (!spEntries[spCurrentKey]) spEntries[spCurrentKey] = {};
+		spEntries[spCurrentKey].content = scratchpadEditor?.innerHTML || "";
+		if (scratchpadCanvas && scratchpadCanvas.width > 0 && scratchpadCanvas.height > 0) {
+			try { spEntries[spCurrentKey].drawing = scratchpadCanvas.toDataURL(); } catch {}
+		}
+	}
+
+	function loadEntry(key) {
+		if (spCurrentKey) saveCurrentEntry();
+		spCurrentKey = key;
+		if (!spEntries[key]) spEntries[key] = { content: "", drawing: "" };
+		const entry = spEntries[key];
+		if (scratchpadEditor) scratchpadEditor.innerHTML = entry.content || "";
+		if (scratchpadCtx && scratchpadCanvas) {
+			scratchpadCtx.clearRect(0, 0, scratchpadCanvas.width, scratchpadCanvas.height);
+			if (entry.drawing) {
+				const img = new Image();
+				img.onload = () => {
+					scratchpadCanvas.width = img.width;
+					scratchpadCanvas.height = img.height;
+					scratchpadCtx.drawImage(img, 0, 0);
+				};
+				img.src = entry.drawing;
+			}
+		}
+		renderEntryList();
+		updateWordCount();
+	}
+
+	function deleteEntry(key) {
+		if (Object.keys(spEntries).length <= 1) return;
+		delete spEntries[key];
+		const keys = Object.keys(spEntries).sort().reverse();
+		loadEntry(keys[0] || todayKey());
+		saveCanvasDebounced();
+	}
+
+	function renderEntryList() {
+		if (!scratchpadEntryList) return;
+		const keys = Object.keys(spEntries).sort().reverse();
+		scratchpadEntryList.innerHTML = "";
+		for (const key of keys) {
+			const item = document.createElement("div");
+			item.className = "sp-entry-item" + (key === spCurrentKey ? " sp-entry-active" : "");
+
+			const info = document.createElement("div");
+			const dateSpan = document.createElement("span");
+			dateSpan.className = "sp-entry-date";
+			dateSpan.textContent = formatEntryLabel(key);
+			info.appendChild(dateSpan);
+			const preview = document.createElement("span");
+			preview.className = "sp-entry-preview";
+			preview.textContent = getEntryPreview(spEntries[key]);
+			info.appendChild(preview);
+			item.appendChild(info);
+
+			if (Object.keys(spEntries).length > 1) {
+				const del = document.createElement("button");
+				del.className = "sp-entry-delete";
+				del.textContent = "×";
+				del.title = "Delete entry";
+				del.addEventListener("click", (e) => {
+					e.stopPropagation();
+					deleteEntry(key);
+				});
+				item.appendChild(del);
+			}
+
+			item.addEventListener("click", () => loadEntry(key));
+			scratchpadEntryList.appendChild(item);
+		}
+	}
+
+	function updateWordCount() {
+		if (!scratchpadWordcount || !scratchpadEditor) return;
+		const text = scratchpadEditor.textContent || "";
+		const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+		const chars = text.length;
+		scratchpadWordcount.textContent = `${words} words · ${chars} chars`;
+	}
+
+	// Save/restore for canvas state persistence
+	function getScratchpadStateForSave() {
+		try {
+			saveCurrentEntry();
+		} catch (err) {
+			console.error("saveCurrentEntry error:", err);
+		}
+		return { entries: spEntries || {}, currentEntry: spCurrentKey };
+	}
+
+	function restoreScratchpadState(saved) {
+		try {
+			if (saved && saved.entries) {
+				// New multi-entry format
+				spEntries = saved.entries;
+				spCurrentKey = saved.currentEntry || Object.keys(spEntries).sort().reverse()[0] || todayKey();
+			} else if (saved && (saved.content || saved.drawing)) {
+				// Legacy single-entry format — migrate
+				const key = todayKey();
+				spEntries = { [key]: { content: saved.content || "", drawing: saved.drawing || "" } };
+				spCurrentKey = key;
+			} else {
+				// No valid data — start fresh
+				const key = todayKey();
+				spEntries = { [key]: { content: "", drawing: "" } };
+				spCurrentKey = key;
+			}
+			// Load current entry into DOM
+			if (!spEntries[spCurrentKey]) spEntries[spCurrentKey] = { content: "", drawing: "" };
+			const entry = spEntries[spCurrentKey];
+			if (scratchpadEditor) scratchpadEditor.innerHTML = entry.content || "";
+			if (scratchpadCtx && scratchpadCanvas && entry.drawing) {
+				const img = new Image();
+				img.onload = () => {
+					scratchpadCanvas.width = img.width;
+					scratchpadCanvas.height = img.height;
+					scratchpadCtx.drawImage(img, 0, 0);
+				};
+				img.src = entry.drawing;
+			}
+			renderEntryList();
+		} catch (err) {
+			console.error("restoreScratchpadState error:", err);
+			const key = todayKey();
+			spEntries = { [key]: { content: "", drawing: "" } };
+			spCurrentKey = key;
+		}
+	}
 
 	function resizeScratchpadCanvas() {
-		if (!scratchpadCanvas || !scratchpadBody) return;
+		if (!scratchpadCanvas || !scratchpadBody || !scratchpadCtx) return;
 		const rect = scratchpadBody.getBoundingClientRect();
-		// Save current drawing
 		const imgData = scratchpadCanvas.width > 0 && scratchpadCanvas.height > 0
 			? scratchpadCtx.getImageData(0, 0, scratchpadCanvas.width, scratchpadCanvas.height)
 			: null;
@@ -3774,13 +3914,12 @@ async function init() {
 		if (!scratchpadBody) return;
 		scratchpadBody.classList.remove("tool-text", "tool-pen", "tool-eraser");
 		scratchpadBody.classList.add("tool-" + tool);
-		// Update active button
 		document.querySelectorAll(".scratchpad-tool-btn").forEach(btn => {
 			btn.classList.toggle("scratchpad-tool-active", btn.dataset.tool === tool);
 		});
 	}
 
-	// Toolbar click handler
+	// Tool buttons
 	document.querySelectorAll(".scratchpad-tool-btn").forEach(btn => {
 		btn.addEventListener("click", (e) => {
 			e.stopPropagation();
@@ -3795,6 +3934,86 @@ async function init() {
 			setScratchpadTool(tool);
 		});
 	});
+
+	// Format buttons
+	document.querySelectorAll(".sp-fmt-btn").forEach(btn => {
+		btn.addEventListener("click", (e) => {
+			e.stopPropagation();
+			const cmd = btn.dataset.cmd;
+			if (cmd === "timestamp") {
+				const now = new Date();
+				const ts = `[${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}] `;
+				document.execCommand("insertText", false, ts);
+			} else if (cmd === "heading") {
+				document.execCommand("formatBlock", false, "h3");
+			} else if (cmd === "code") {
+				const sel = window.getSelection();
+				if (sel && sel.rangeCount > 0 && sel.toString().length > 0) {
+					const range = sel.getRangeAt(0);
+					const code = document.createElement("code");
+					code.style.background = "rgba(255,255,255,0.1)";
+					code.style.padding = "1px 4px";
+					code.style.borderRadius = "3px";
+					range.surroundContents(code);
+				}
+			} else {
+				document.execCommand(cmd, false, null);
+			}
+			scratchpadEditor?.focus();
+			updateWordCount();
+			saveCanvasDebounced();
+		});
+	});
+
+	// Pen color dots
+	document.querySelectorAll(".sp-color-dot").forEach(dot => {
+		dot.addEventListener("click", (e) => {
+			e.stopPropagation();
+			spPenColor = dot.dataset.color;
+			document.querySelectorAll(".sp-color-dot").forEach(d => d.classList.remove("sp-color-active"));
+			dot.classList.add("sp-color-active");
+		});
+	});
+
+	// New entry button
+	if (scratchpadNewEntryBtn) {
+		scratchpadNewEntryBtn.addEventListener("click", () => {
+			const key = todayKey();
+			if (!spEntries[key]) {
+				spEntries[key] = { content: "", drawing: "" };
+			}
+			loadEntry(key);
+			scratchpadEditor?.focus();
+			saveCanvasDebounced();
+		});
+	}
+
+	// Copy button
+	if (scratchpadCopyBtn) {
+		scratchpadCopyBtn.addEventListener("click", () => {
+			const text = scratchpadEditor?.textContent || "";
+			navigator.clipboard.writeText(text).then(() => {
+				scratchpadCopyBtn.textContent = "Copied!";
+				setTimeout(() => { scratchpadCopyBtn.textContent = "Copy"; }, 1500);
+			});
+		});
+	}
+
+	// Send to canvas as sticky note
+	if (scratchpadSendCanvasBtn) {
+		scratchpadSendCanvasBtn.addEventListener("click", () => {
+			const sel = window.getSelection();
+			const text = (sel && sel.toString().trim()) || scratchpadEditor?.textContent?.trim() || "";
+			if (!text) return;
+			// Place near center of current viewport
+			const cx = (window.innerWidth / 2 - canvasX) / canvasScale;
+			const cy = (window.innerHeight / 2 - canvasY) / canvasScale;
+			createTextTile(cx, cy, text);
+			scratchpadSendCanvasBtn.textContent = "Sent!";
+			setTimeout(() => { scratchpadSendCanvasBtn.textContent = "→ Canvas"; }, 1500);
+			saveCanvasDebounced();
+		});
+	}
 
 	// Drawing on scratchpad canvas
 	if (scratchpadCanvas && scratchpadCtx) {
@@ -3819,7 +4038,7 @@ async function init() {
 				scratchpadCtx.lineWidth = 20;
 			} else {
 				scratchpadCtx.globalCompositeOperation = "source-over";
-				scratchpadCtx.strokeStyle = "#ffffff";
+				scratchpadCtx.strokeStyle = spPenColor;
 				scratchpadCtx.lineWidth = 3;
 			}
 			scratchpadCtx.lineCap = "round";
@@ -3850,7 +4069,14 @@ async function init() {
 		if (!scratchpadOverlay) return;
 		isScratchpadOpen = true;
 		scratchpadOverlay.classList.add("visible");
+		// Ensure today's entry exists
+		const today = todayKey();
+		if (!spCurrentKey || !spEntries[spCurrentKey]) {
+			if (!spEntries[today]) spEntries[today] = { content: "", drawing: "" };
+			loadEntry(today);
+		}
 		setScratchpadTool(scratchpadTool);
+		renderEntryList();
 		setTimeout(() => {
 			resizeScratchpadCanvas();
 			if (scratchpadTool === "text") scratchpadEditor?.focus();
@@ -3860,35 +4086,36 @@ async function init() {
 	function closeScratchpad() {
 		if (!scratchpadOverlay) return;
 		isScratchpadOpen = false;
+		saveCurrentEntry();
 		scratchpadOverlay.classList.remove("visible");
 		saveCanvasDebounced();
 	}
 
 	function toggleScratchpad() {
-		if (isScratchpadOpen) {
-			closeScratchpad();
-		} else {
-			openScratchpad();
-		}
+		if (isScratchpadOpen) closeScratchpad();
+		else openScratchpad();
 	}
 
 	if (scratchpadCloseBtn) scratchpadCloseBtn.addEventListener("click", closeScratchpad);
 	if (scratchpadBackdrop) scratchpadBackdrop.addEventListener("click", closeScratchpad);
 	if (scratchpadDockBtn) {
 		scratchpadDockBtn.addEventListener("mousedown", (e) => e.stopPropagation());
-		scratchpadDockBtn.addEventListener("click", toggleScratchpad);
+		scratchpadDockBtn.addEventListener("click", () => {
+			document.title = "[memo] CLICKED";
+			toggleScratchpad();
+		});
 	}
 
-	// Auto-save on input (debounced)
+	// Auto-save & word count on input
 	if (scratchpadEditor) {
 		scratchpadEditor.addEventListener("input", () => {
+			updateWordCount();
 			saveCanvasDebounced();
 		});
 	}
 
 	// Keyboard: backtick to toggle, Escape to close
 	window.addEventListener("keydown", (e) => {
-		// Close scratchpad with Escape
 		if (e.key === "Escape" && isScratchpadOpen) {
 			e.preventDefault();
 			e.stopPropagation();
@@ -3896,7 +4123,6 @@ async function init() {
 			return;
 		}
 
-		// Backtick toggle (only when not editing text elsewhere)
 		if (e.key === "`" && !e.metaKey && !e.ctrlKey && !e.altKey) {
 			if (isScratchpadOpen) {
 				e.preventDefault();
@@ -3916,7 +4142,7 @@ async function init() {
 				return;
 			}
 		}
-	}, true); // capture phase so it fires before other handlers
+	}, true);
 }
 
 async function checkFirstLaunchDialog() {

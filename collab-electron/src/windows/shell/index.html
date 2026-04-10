@@ -156,19 +156,49 @@
 		<div id="scratchpad-backdrop"></div>
 		<div id="scratchpad-modal">
 			<div id="scratchpad-header">
-				<span>Scratchpad</span>
+				<span>Memo</span>
 				<button type="button" id="scratchpad-close">&times;</button>
 			</div>
-			<div id="scratchpad-toolbar">
-				<button type="button" class="scratchpad-tool-btn scratchpad-tool-active" data-tool="text" title="Text">T</button>
-				<button type="button" class="scratchpad-tool-btn" data-tool="pen" title="Pen">P</button>
-				<button type="button" class="scratchpad-tool-btn" data-tool="eraser" title="Eraser">E</button>
-				<span class="scratchpad-separator"></span>
-				<button type="button" class="scratchpad-tool-btn" data-tool="clear-drawing" title="Clear drawing">Clear</button>
-			</div>
-			<div id="scratchpad-body">
-				<canvas id="scratchpad-canvas"></canvas>
-				<div id="scratchpad-editor" contenteditable="true" spellcheck="true"></div>
+			<div id="scratchpad-main">
+				<div id="scratchpad-sidebar">
+					<div id="scratchpad-entry-list"></div>
+					<button type="button" id="scratchpad-new-entry">+ New</button>
+				</div>
+				<div id="scratchpad-content">
+					<div id="scratchpad-toolbar">
+						<button type="button" class="sp-fmt-btn" data-cmd="bold" title="Bold (Cmd+B)"><b>B</b></button>
+						<button type="button" class="sp-fmt-btn" data-cmd="italic" title="Italic (Cmd+I)"><i>I</i></button>
+						<button type="button" class="sp-fmt-btn" data-cmd="heading" title="Heading">H</button>
+						<button type="button" class="sp-fmt-btn" data-cmd="insertUnorderedList" title="List">•</button>
+						<button type="button" class="sp-fmt-btn" data-cmd="code" title="Code">&lt;&gt;</button>
+						<button type="button" class="sp-fmt-btn" data-cmd="timestamp" title="Insert timestamp">⏱</button>
+						<span class="scratchpad-separator"></span>
+						<button type="button" class="scratchpad-tool-btn scratchpad-tool-active" data-tool="text" title="Text">T</button>
+						<button type="button" class="scratchpad-tool-btn" data-tool="pen" title="Pen">P</button>
+						<button type="button" class="scratchpad-tool-btn" data-tool="eraser" title="Eraser">E</button>
+						<span class="scratchpad-separator"></span>
+						<div id="sp-pen-colors">
+							<div class="sp-color-dot sp-color-active" data-color="#ffffff" style="background:#ffffff" title="White"></div>
+							<div class="sp-color-dot" data-color="#ef4444" style="background:#ef4444" title="Red"></div>
+							<div class="sp-color-dot" data-color="#3b82f6" style="background:#3b82f6" title="Blue"></div>
+							<div class="sp-color-dot" data-color="#22c55e" style="background:#22c55e" title="Green"></div>
+							<div class="sp-color-dot" data-color="#eab308" style="background:#eab308" title="Yellow"></div>
+						</div>
+						<span class="scratchpad-separator"></span>
+						<button type="button" class="scratchpad-tool-btn" data-tool="clear-drawing" title="Clear drawing">Clear</button>
+					</div>
+					<div id="scratchpad-body">
+						<canvas id="scratchpad-canvas"></canvas>
+						<div id="scratchpad-editor" contenteditable="true" spellcheck="true"></div>
+					</div>
+					<div id="scratchpad-footer">
+						<span id="scratchpad-wordcount">0 words</span>
+						<div id="scratchpad-footer-actions">
+							<button type="button" id="scratchpad-copy" title="Copy text to clipboard">Copy</button>
+							<button type="button" id="scratchpad-send-canvas" title="Send to canvas as sticky note">→ Canvas</button>
+						</div>
+					</div>
+				</div>
 			</div>
 		</div>
 	</div>
