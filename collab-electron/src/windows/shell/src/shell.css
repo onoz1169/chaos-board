@@ -2499,7 +2499,7 @@ body {
 .kanban-card-title {
 	font-weight: 500;
 	color: var(--fg);
-	white-space: pre-wrap;
+	word-break: break-word;
 	flex: 1;
 	min-width: 0;
 }

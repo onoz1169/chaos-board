@@ -1492,6 +1492,17 @@ async function init() {
 			tileDOMs.delete(id);
 		}
 
+		// Clear kanban card references to this tile
+		const allCols = [...kanbanState.columns, ...(kanbanState.zoneColumns || [])];
+		for (const col of allCols) {
+			for (const card of col.cards) {
+				if (card.tileId === id) {
+					card.tileId = null;
+					card.status = null;
+				}
+			}
+		}
+
 		deselectTile(id);
 		removeTileFromGroup(id);
 		for (const conn of getConnectionsForTile(id)) {
@@ -4455,7 +4466,7 @@ async function init() {
 		deleteBtn.innerHTML = "&times;";
 		deleteBtn.addEventListener("click", (e) => {
 			e.stopPropagation();
-			const col = kanbanState.columns.find((c) => c.cards.some((cd) => cd.id === card.id));
+			const col = getActiveColumns().find((c) => c.cards.some((cd) => cd.id === card.id));
 			if (col) col.cards = col.cards.filter((c) => c.id !== card.id);
 			renderKanban();
 			saveCanvasDebounced();
@@ -4708,22 +4719,24 @@ async function init() {
 		// 2. Wait for it to start up
 		// 3. Send the task as input
 		const checkInterval = setInterval(() => {
+			if (!tile || !getTile(tile.id)) { clearInterval(checkInterval); return; }
 			if (tile.ptySessionId) {
 				clearInterval(checkInterval);
 				// Step 1: Launch Claude Code in YOLO mode
 				window.shellApi.ptyWrite(tile.ptySessionId, "claude --dangerously-skip-permissions\n");
 				// Step 2: Wait for Claude to initialize, then send the task + Enter
 				setTimeout(() => {
-					// Type the prompt text first, then press Enter to submit
+					if (!tile.ptySessionId) return;
 					window.shellApi.ptyWrite(tile.ptySessionId, prompt);
 					setTimeout(() => {
+						if (!tile.ptySessionId) return;
 						window.shellApi.ptyWrite(tile.ptySessionId, "\r");
 					}, 100);
-				}, 3000);
+				}, 5000);
 			}
 		}, 200);
-		// Safety timeout — stop checking after 10s
-		setTimeout(() => clearInterval(checkInterval), 10000);
+		// Safety timeout — stop checking after 15s
+		setTimeout(() => clearInterval(checkInterval), 15000);
 
 		saveCanvasDebounced();
 	}
@@ -4990,9 +5003,19 @@ async function init() {
 				if (!cardId) return;
 				const found = findCard(cardId);
 				if (!found) return;
-				if (found.col.id === col.id) return;
+				// Remove from source column
 				found.col.cards = found.col.cards.filter((c) => c.id !== cardId);
-				col.cards.push(found.card);
+				// Insert at drop position based on mouse Y
+				const cardEls = colEl.querySelectorAll(".kanban-card");
+				let insertIdx = col.cards.length;
+				for (let i = 0; i < cardEls.length; i++) {
+					const rect = cardEls[i].getBoundingClientRect();
+					if (e.clientY < rect.top + rect.height / 2) {
+						insertIdx = i;
+						break;
+					}
+				}
+				col.cards.splice(insertIdx, 0, found.card);
 				renderKanban();
 				saveCanvasDebounced();
 			});
@@ -5002,7 +5025,7 @@ async function init() {
 			addBtn.className = "kanban-add-card";
 			addBtn.textContent = "+ Add task";
 			addBtn.addEventListener("click", () => {
-				const newCard = { id: genCardId(), title: "", due: "", priority: "", notes: "" };
+				const newCard = normalizeCard({});
 				col.cards.push(newCard);
 				expandedCardId = newCard.id;
 				renderKanban();
