@@ -221,13 +221,15 @@ export function createTileDOM(tile, callbacks) {
     textEl.dataset.placeholder = "Type here...";
     textEl.addEventListener("focus", () => textEl.classList.add("editing"));
     textEl.addEventListener("blur", () => textEl.classList.remove("editing"));
-    // Prevent mousedown/click from bubbling to the tile drag handlers so that
-    // clicking the text area always activates the caret without needing a
-    // "focus first, then click" two-step interaction.
+    // When editing (focused), stop propagation so typing and text selection work.
+    // When not editing, let mousedown bubble to drag handlers so the note is draggable.
     textEl.addEventListener("mousedown", (e) => {
-      e.stopPropagation();
+      if (textEl.classList.contains("editing")) {
+        e.stopPropagation();
+      }
     });
-    textEl.addEventListener("click", (e) => {
+    // Double-click to start editing
+    textEl.addEventListener("dblclick", (e) => {
       e.stopPropagation();
       textEl.focus();
     });

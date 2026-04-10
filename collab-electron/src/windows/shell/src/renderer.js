@@ -1364,6 +1364,45 @@ async function init() {
 			contentOverlay: dom.contentOverlay,
 			isSelected: () => isSelected(tile.id),
 		});
+		// Sticky notes: also allow drag from content area (not just title bar)
+		if (tile.type === "text" && dom.contentArea) {
+			attachDrag(dom.contentArea, tile, {
+				viewport,
+				onUpdate: repositionAllTiles,
+				disablePointerEvents: (wvs) => {
+					for (const w of wvs) w.webview.style.pointerEvents = "none";
+				},
+				enablePointerEvents: (wvs) => {
+					for (const w of wvs) w.webview.style.pointerEvents = "";
+				},
+				getAllWebviews,
+				getGroupDragContext: () => {
+					const dragIds = new Set();
+					if (isSelected(tile.id)) {
+						for (const st of getSelectedTiles()) dragIds.add(st.id);
+					}
+					const pg = getGroupForTile(tile.id);
+					if (pg) {
+						for (const gid of pg.tileIds) dragIds.add(gid);
+					}
+					if (dragIds.size <= 1) return null;
+					return [...dragIds].map((id) => {
+						const t = getTile(id);
+						return t ? { tile: t, container: tileDOMs.get(id)?.container, startX: t.x, startY: t.y } : null;
+					}).filter(Boolean);
+				},
+				onDrop: () => {
+					updateZoneSummaries(tiles);
+					saveCanvasDebounced();
+					syncSelectionVisuals();
+				},
+				onFocus: (id, e) => focusCanvasTile(id, e),
+				isSpaceHeld: () => spaceHeld,
+				contentOverlay: dom.contentOverlay,
+				isSelected: () => isSelected(tile.id),
+			});
+		}
+
 		attachResize(
 			dom.container, tile, viewport,
 			repositionAllTiles,

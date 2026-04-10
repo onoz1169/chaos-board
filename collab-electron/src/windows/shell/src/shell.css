@@ -1235,6 +1235,20 @@ body {
 .canvas-tile[data-tile-type="text"] .tile-title-bar {
 	background: #f5f0c8;
 	border-bottom: 1px solid #d4d0a0;
+	min-height: 24px;
+	padding: 4px 8px;
+}
+
+.canvas-tile[data-tile-type="text"] .tile-content {
+	cursor: grab;
+}
+
+.canvas-tile[data-tile-type="text"] .tile-content:active {
+	cursor: grabbing;
+}
+
+.canvas-tile[data-tile-type="text"] .sticky-text.editing {
+	cursor: text;
 }
 
 /* ── Terminal rename edit icon ── */
