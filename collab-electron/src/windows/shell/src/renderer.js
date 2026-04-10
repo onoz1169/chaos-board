@@ -4312,14 +4312,32 @@ async function init() {
 				}
 				const savedArchived = Array.isArray(saved.archived) ? saved.archived.map(normalizeCard) : [];
 
-				// Restore zone columns if present
+				// Restore zone columns — migrate cards if zone IDs were renamed
 				let zoneColumns = null;
 				if (saved.zoneColumns && Array.isArray(saved.zoneColumns)) {
-					zoneColumns = saved.zoneColumns.map((zc) => ({
+					const currentZoneIds = new Set(ZONE_COLUMNS.map((z) => z.id));
+					const restoredCols = saved.zoneColumns.map((zc) => ({
 						id: zc.id,
 						title: zc.title || "Untitled",
 						cards: Array.isArray(zc.cards) ? zc.cards.map(normalizeCard) : [],
 					}));
+
+					// Check if saved IDs match current zone definitions
+					const savedIds = new Set(restoredCols.map((c) => c.id));
+					const allMatch = ZONE_COLUMNS.every((z) => savedIds.has(z.id));
+
+					if (allMatch) {
+						zoneColumns = restoredCols;
+					} else {
+						// Zone IDs changed — create fresh columns and migrate cards by position
+						zoneColumns = createDefaultZoneColumns();
+						const orphanCards = restoredCols.flatMap((c) => c.cards);
+						if (orphanCards.length > 0) {
+							// Put orphaned cards in the first zone column
+							zoneColumns[0].cards.push(...orphanCards);
+							console.log(`[kanban] Migrated ${orphanCards.length} cards from renamed zone columns`);
+						}
+					}
 				}
 
 				kanbanState = {
