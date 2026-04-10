@@ -735,6 +735,7 @@ async function init() {
 	// -- Canvas persistence --
 
 	let saveTimer = null;
+	let canvasRestoreComplete = false;
 
 	function getCanvasStateForSave() {
 		return {
@@ -774,13 +775,13 @@ async function init() {
 	}
 
 	function saveCanvasDebounced() {
+		if (!canvasRestoreComplete) return;
 		clearTimeout(saveTimer);
 		saveTimer = setTimeout(async () => {
 			try {
 				await window.shellApi.canvasSaveState(getCanvasStateForSave());
 			} catch (err) {
 				console.error("Canvas save failed:", err);
-				// Retry once after 3 seconds
 				setTimeout(() => {
 					window.shellApi.canvasSaveState(getCanvasStateForSave()).catch(console.error);
 				}, 3000);
@@ -789,6 +790,7 @@ async function init() {
 	}
 
 	function saveCanvasImmediate() {
+		if (!canvasRestoreComplete) return;
 		clearTimeout(saveTimer);
 		window.shellApi.canvasSaveState(getCanvasStateForSave()).catch(err => {
 			console.error("Immediate canvas save failed:", err);
@@ -2633,6 +2635,11 @@ async function init() {
 			restoreKanbanState(savedState.kanban);
 		}
 
+		// All data restored — enable saving
+		canvasRestoreComplete = true;
+	} else {
+		// No saved state (fresh start) — enable saving
+		canvasRestoreComplete = true;
 	}
 
 	// -- Initialize workspaces --

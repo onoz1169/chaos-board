@@ -48,6 +48,22 @@ export async function saveState(state: CanvasState): Promise<void> {
   if (!existsSync(STATE_DIR)) {
     await mkdir(STATE_DIR, { recursive: true });
   }
+
+  // Preserve scratchpad content if new state has empty content but existing file has data
+  const stateAny = state as Record<string, unknown>;
+  const sp = stateAny.scratchpad as { content?: string; drawing?: string } | undefined;
+  if (sp && !sp.content && existsSync(STATE_FILE)) {
+    try {
+      const existing = JSON.parse(await readFile(STATE_FILE, "utf-8"));
+      if (existing.scratchpad?.content) {
+        sp.content = existing.scratchpad.content;
+      }
+      if (!sp.drawing && existing.scratchpad?.drawing) {
+        sp.drawing = existing.scratchpad.drawing;
+      }
+    } catch { /* ignore read errors */ }
+  }
+
   const tmp = join(
     tmpdir(),
     `canvas-state-${crypto.randomUUID()}.json`,
