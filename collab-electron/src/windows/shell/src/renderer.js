@@ -246,7 +246,8 @@ canvasEl.addEventListener("wheel", (e) => {
 			canvasY -= e.deltaY * 1.2;
 			updateCanvas();
 			clearTimeout(wheelPanEndTimer);
-			wheelPanEndTimer = setTimeout(maybeAutoFitOnZoneCross, 260);
+			// Disabled: auto-fit on zone cross was moving viewport unexpectedly
+			// wheelPanEndTimer = setTimeout(maybeAutoFitOnZoneCross, 260);
 		}
 	}
 }, { passive: false });
@@ -3287,7 +3288,8 @@ async function init() {
 			for (const h of getAllWebviews()) {
 				h.webview.style.pointerEvents = "";
 			}
-			maybeAutoFitOnZoneCross();
+			// Disabled: auto-fit on zone cross
+			// maybeAutoFitOnZoneCross();
 		}
 
 		document.addEventListener("mousemove", onMove);
@@ -3653,15 +3655,8 @@ async function init() {
 				};
 			}
 			case "viewportSet": {
-				if (params.pan) {
-					canvasX = params.pan.x;
-					canvasY = params.pan.y;
-				}
-				if (params.zoom !== undefined) {
-					canvasScale = params.zoom;
-				}
-				updateCanvas();
-				saveCanvasDebounced();
+				// Disabled: prevent external processes from moving viewport
+				console.log("[rpc] viewportSet blocked (external viewport control disabled)");
 				return {};
 			}
 			case "jumpToZone": {
