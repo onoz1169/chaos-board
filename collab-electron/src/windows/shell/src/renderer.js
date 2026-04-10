@@ -577,7 +577,7 @@ async function init() {
 	const ZONE_COLUMNS = [
 		{ id: "zone-intelligence", title: "INTELLIGENCE", color: "rgba(80,140,255,0.9)" },
 		{ id: "zone-hunt", title: "HUNT", color: "rgba(220,80,80,0.9)" },
-		{ id: "zone-forge", title: "FORGE", color: "rgba(60,180,100,0.9)" },
+		{ id: "zone-blacksmith", title: "BLACKSMITH", color: "rgba(60,180,100,0.9)" },
 		{ id: "zone-rest", title: "REST", color: "rgba(200,180,120,0.9)" },
 		{ id: "zone-reflect", title: "REFLECT", color: "rgba(160,120,200,0.9)" },
 	];

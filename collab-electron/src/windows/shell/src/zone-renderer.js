@@ -3,8 +3,8 @@
  *
  * Draws persistent background zones that visually partition the canvas.
  *
- * INTELLIGENCE → HUNT → FORGE → REST → REFLECT
- *   諜報          狩      鍛治     回復    内省
+ * INTELLIGENCE → HUNT → BLACKSMITH → REST → REFLECT
+ *   諜報          狩      鍛冶     回復    内省
  *
  * Each zone has a main workspace area on top and a 5W1H strip at the bottom:
  *   WHY | WHAT | WHO | WHERE | WHEN | HOW
@@ -49,8 +49,8 @@ const ZONES = [
 		height: TOTAL_ZONE_H,
 	},
 	{
-		id: "zone-forge",
-		label: "FORGE",
+		id: "zone-blacksmith",
+		label: "BLACKSMITH",
 		color: "rgba(60,180,100,0.12)",
 		borderColor: "rgba(60,180,100,0.9)",
 		x: COL2,

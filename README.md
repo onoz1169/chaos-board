@@ -11,7 +11,7 @@ The app is early-stage and in active development. macOS only for now.
 ## What chaos-board adds to Collaborator
 
 ### Spatial Organization
-- **5 canvas zones** — INTELLIGENCE / HUNT / FORGE / REST / REFLECT — a Monster Hunter-inspired loop: gather intel, execute work, build better tools, recover, reflect
+- **5 canvas zones** — INTELLIGENCE / HUNT / BLACKSMITH / REST / REFLECT — a Monster Hunter-inspired loop: gather intel, execute work, build better tools, recover, reflect
 - **Zone summaries** — each zone displays a live count of contained tiles by type
 - **Tile temperature** — recently active tiles glow subtly, giving visual pulse to your workspace
 - **Jump to zone** (Cmd+J) — quick navigation with auto-zoom to fit the zone in view
@@ -90,11 +90,11 @@ All data is stored locally on disk (`~/.collaborator/`). No accounts required.
 
 ## Canvas Zones
 
-Inspired by the Monster Hunter loop — scout, hunt, forge, rest, reflect, repeat.
+Inspired by the Monster Hunter loop — scout, hunt, smith, rest, reflect, repeat.
 
 ```
 ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
-│ INTELLIGENCE │ │     HUNT     │ │    FORGE     │ │     REST     │ │   REFLECT    │
+│ INTELLIGENCE │ │     HUNT     │ │    BLACKSMITH     │ │     REST     │ │   REFLECT    │
 │    (blue)    │ │    (red)     │ │   (green)    │ │    (gold)    │ │   (purple)   │
 │              │ │              │ │              │ │              │ │              │
 │  Gather info │ │  Execute     │ │  Build tools │ │  Recover     │ │  Look back   │
@@ -115,7 +115,7 @@ Inspired by the Monster Hunter loop — scout, hunt, forge, rest, reflect, repea
 │ └──────────┘ │                                                                 │
 └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘
 
-INTELLIGENCE → HUNT → FORGE → REST → REFLECT → INTELLIGENCE ...
+INTELLIGENCE → HUNT → BLACKSMITH → REST → REFLECT → INTELLIGENCE ...
 ```
 
 Each zone has two areas:
