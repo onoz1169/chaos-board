@@ -4711,9 +4711,8 @@ async function init() {
 		card.tileId = tile.id;
 		card.status = "running";
 
-		// Close memo and pan to the tile
+		// Close memo (don't move the viewport — user stays where they are)
 		closeScratchpad();
-		setTimeout(() => panToTile(tile, true), 200);
 
 		// Wait for PTY session to be ready, then:
 		// 1. Launch claude in interactive mode
@@ -4726,9 +4725,13 @@ async function init() {
 				window.shellApi.ptyWrite(tile.ptySessionId, "claude --dangerously-skip-permissions\n");
 				setTimeout(() => {
 					if (!tile.ptySessionId) return;
-					// Send prompt as single line (newlines → spaces) then Enter
 					const singleLine = prompt.replace(/[\r\n]+/g, " ").trim();
-					window.shellApi.ptyWrite(tile.ptySessionId, singleLine + "\r");
+					// Send text first, then Enter separately after a short delay
+					window.shellApi.ptyWrite(tile.ptySessionId, singleLine);
+					setTimeout(() => {
+						if (!tile.ptySessionId) return;
+						window.shellApi.ptyWrite(tile.ptySessionId, "\r");
+					}, 300);
 				}, CLAUDE_INIT_MS);
 			}
 		}, PTY_POLL_MS);
