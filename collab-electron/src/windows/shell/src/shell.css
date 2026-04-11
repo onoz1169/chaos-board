@@ -2273,6 +2273,10 @@ body {
 	border-right: none;
 }
 
+#scratchpad-pane-kanban {
+	position: relative;
+}
+
 .scratchpad-pane-header {
 	display: flex;
 	align-items: center;
@@ -2494,6 +2498,98 @@ body {
 	background: rgba(239, 68, 68, 0.15);
 	border-color: #ef4444;
 	color: #ef4444;
+}
+
+/* Card detail modal — contained within kanban pane */
+#kanban-card-modal {
+	position: absolute;
+	inset: 0;
+	z-index: 10;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 8px;
+}
+
+#kanban-card-modal.kanban-modal-hidden {
+	display: none;
+}
+
+#kanban-card-modal-backdrop {
+	position: absolute;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.4);
+	border-radius: 0 0 14px 0;
+}
+
+#kanban-card-modal-content {
+	position: relative;
+	width: 100%;
+	max-height: 100%;
+	overflow-y: auto;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: 16px;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.kanban-modal-title {
+	font-size: 18px;
+	font-weight: 600;
+	color: var(--fg);
+	outline: none;
+	border: none;
+	background: transparent;
+	font-family: var(--font-mono);
+	padding: 4px 0;
+	border-bottom: 1px solid var(--border);
+	width: 100%;
+}
+
+.kanban-modal-row {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	flex-wrap: wrap;
+}
+
+.kanban-modal-label {
+	font-size: 11px;
+	color: var(--muted);
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	min-width: 60px;
+}
+
+.kanban-modal-notes {
+	width: 100%;
+	min-height: 120px;
+	padding: 10px 12px;
+	background: rgba(255, 255, 255, 0.04);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	color: var(--fg);
+	font-family: var(--font-mono);
+	font-size: 13px;
+	line-height: 1.6;
+	resize: vertical;
+	outline: none;
+}
+
+.kanban-modal-notes:focus {
+	border-color: #4a9eff;
+}
+
+.kanban-modal-actions {
+	display: flex;
+	gap: 8px;
+	justify-content: flex-end;
+	padding-top: 8px;
+	border-top: 1px solid var(--border);
 }
 
 .kanban-column {

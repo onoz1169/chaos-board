@@ -4714,6 +4714,162 @@ async function init() {
 
 	let expandedCardId = null;
 
+	// -- Card detail modal --
+	const cardModal = document.getElementById("kanban-card-modal");
+	const cardModalContent = document.getElementById("kanban-card-modal-content");
+	const cardModalBackdrop = document.getElementById("kanban-card-modal-backdrop");
+
+	function openCardModal(card, col) {
+		if (!cardModal || !cardModalContent) return;
+		cardModalContent.innerHTML = "";
+
+		const titleInput = document.createElement("input");
+		titleInput.type = "text";
+		titleInput.className = "kanban-modal-title";
+		titleInput.placeholder = "Task title";
+		titleInput.value = card.title || "";
+		cardModalContent.appendChild(titleInput);
+
+		// Due + Priority row
+		const metaRow = document.createElement("div");
+		metaRow.className = "kanban-modal-row";
+
+		const dueLabel = document.createElement("span");
+		dueLabel.className = "kanban-modal-label";
+		dueLabel.textContent = "Due";
+		metaRow.appendChild(dueLabel);
+
+		const dueInput = document.createElement("input");
+		dueInput.type = "date";
+		dueInput.className = "kanban-field-due";
+		dueInput.value = card.due || "";
+		metaRow.appendChild(dueInput);
+
+		const prioLabel = document.createElement("span");
+		prioLabel.className = "kanban-modal-label";
+		prioLabel.textContent = "Priority";
+		metaRow.appendChild(prioLabel);
+
+		const prioSelect = document.createElement("div");
+		prioSelect.className = "kanban-prio-group";
+		const prios = [
+			{ key: "", label: "—" },
+			{ key: "low", label: "Low" },
+			{ key: "mid", label: "Mid" },
+			{ key: "high", label: "High" },
+		];
+		let currentPrio = card.priority || "";
+		for (const p of prios) {
+			const btn = document.createElement("button");
+			btn.type = "button";
+			btn.className = "kanban-prio-btn";
+			if (p.key) btn.classList.add(`kanban-prio-${p.key}`);
+			if (currentPrio === p.key) btn.classList.add("kanban-prio-active");
+			btn.textContent = p.label;
+			btn.addEventListener("click", (e) => {
+				e.stopPropagation();
+				currentPrio = p.key;
+				prioSelect.querySelectorAll(".kanban-prio-btn").forEach((b) =>
+					b.classList.remove("kanban-prio-active"),
+				);
+				btn.classList.add("kanban-prio-active");
+			});
+			prioSelect.appendChild(btn);
+		}
+		metaRow.appendChild(prioSelect);
+		cardModalContent.appendChild(metaRow);
+
+		// Status row (if AI task)
+		if (card.ai || card.tileId) {
+			const statusRow = document.createElement("div");
+			statusRow.className = "kanban-modal-row";
+			const badge = createStatusBadge(card);
+			statusRow.appendChild(badge);
+			cardModalContent.appendChild(statusRow);
+		}
+
+		// Notes
+		const notesArea = document.createElement("textarea");
+		notesArea.className = "kanban-modal-notes";
+		notesArea.placeholder = "Notes / details";
+		notesArea.value = card.notes || "";
+		cardModalContent.appendChild(notesArea);
+
+		// Actions
+		const actions = document.createElement("div");
+		actions.className = "kanban-modal-actions";
+
+		const saveBtn = document.createElement("button");
+		saveBtn.type = "button";
+		saveBtn.className = "kanban-save-btn";
+		saveBtn.textContent = "Save";
+		actions.appendChild(saveBtn);
+
+		const cancelBtn = document.createElement("button");
+		cancelBtn.type = "button";
+		cancelBtn.className = "kanban-cancel-btn";
+		cancelBtn.textContent = "Cancel";
+		actions.appendChild(cancelBtn);
+
+		const runBtn = document.createElement("button");
+		runBtn.type = "button";
+		runBtn.className = "kanban-run-btn";
+		runBtn.textContent = card.tileId ? "Jump" : "\u25B6 Run";
+		actions.appendChild(runBtn);
+
+		cardModalContent.appendChild(actions);
+
+		function commitModal() {
+			card.title = titleInput.value.trim();
+			card.due = dueInput.value || "";
+			card.priority = currentPrio;
+			card.notes = notesArea.value;
+			closeCardModal();
+			renderKanban();
+			saveCanvasDebounced();
+		}
+
+		function closeCardModal() {
+			cardModal.classList.add("kanban-modal-hidden");
+		}
+
+		saveBtn.addEventListener("click", commitModal);
+		cancelBtn.addEventListener("click", closeCardModal);
+		cardModalBackdrop.addEventListener("click", closeCardModal);
+
+		runBtn.addEventListener("click", () => {
+			card.title = titleInput.value.trim();
+			card.notes = notesArea.value;
+			card.due = dueInput.value || "";
+			card.priority = currentPrio;
+			if (card.tileId) {
+				const t = getTile(card.tileId);
+				if (t) { closeCardModal(); closeScratchpad(); panToTile(t, true); }
+			} else if (card.title || card.notes) {
+				card.ai = true;
+				closeCardModal();
+				launchClaudeForCard(card, col);
+				renderKanban();
+				saveCanvasDebounced();
+			}
+		});
+
+		// ESC to close, Cmd+Enter to save
+		cardModalContent.addEventListener("keydown", (e) => {
+			if (e.key === "Escape") {
+				e.preventDefault();
+				e.stopPropagation();
+				closeCardModal();
+			} else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+				e.preventDefault();
+				commitModal();
+			}
+		});
+
+		cardModal.classList.remove("kanban-modal-hidden");
+		setTimeout(() => titleInput.focus(), 0);
+	}
+
 	const PTY_POLL_MS = 200;
 	const CLAUDE_INIT_MS = 5000;
 	const PTY_TIMEOUT_MS = 15000;
@@ -5001,8 +5157,7 @@ async function init() {
 				if (!isExpanded) {
 					cardEl.addEventListener("click", (e) => {
 						if (e.target.closest(".kanban-card-delete")) return;
-						expandedCardId = card.id;
-						renderKanban();
+						openCardModal(card, col);
 					});
 				}
 
