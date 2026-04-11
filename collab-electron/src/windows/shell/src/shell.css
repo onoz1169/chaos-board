@@ -2525,16 +2525,20 @@ body {
 #kanban-card-modal-content {
 	position: relative;
 	width: 100%;
-	max-height: 100%;
+	height: 100%;
 	overflow-y: auto;
 	background: var(--bg);
 	border: 1px solid var(--border);
 	border-radius: 8px;
-	padding: 16px;
+	padding: 20px;
 	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
+}
+
+.kanban-modal-notes {
+	flex: 1;
 }
 
 .kanban-modal-title {
