@@ -4287,8 +4287,17 @@ async function init() {
 			ai: (raw && raw.ai) || false,
 			tileId: (raw && raw.tileId) || null,
 			status: (raw && raw.status) || null,
+			owner: (raw && raw.owner) || "",
+			project: (raw && raw.project) || "",
 		};
 	}
+
+	const OWNER_DEFS = [
+		{ key: "", label: "—" },
+		{ key: "self", label: "Self", color: "#8b5cf6" },
+		{ key: "ai", label: "AI", color: "#06b6d4" },
+		{ key: "client", label: "Client", color: "#ec4899" },
+	];
 
 	function restoreKanbanState(saved) {
 		try {
@@ -4533,16 +4542,37 @@ async function init() {
 				const badge = createStatusBadge(card);
 				meta.appendChild(badge);
 			}
+			if (card.owner) {
+				meta.appendChild(createOwnerBadge(card.owner));
+			}
 			cardEl.appendChild(meta);
 		}
-		// Show status badge even without other meta
-		if (card.ai && !(showDue || showNotesIcon)) {
+		// Show badges even without other meta
+		if ((card.ai || card.owner || card.project) && !(showDue || showNotesIcon)) {
 			const meta = document.createElement("div");
 			meta.className = "kanban-card-meta";
-			const badge = createStatusBadge(card);
-			meta.appendChild(badge);
+			if (card.ai) meta.appendChild(createStatusBadge(card));
+			if (card.owner) meta.appendChild(createOwnerBadge(card.owner));
+			if (card.project) {
+				const projTag = document.createElement("span");
+				projTag.className = "kanban-project-tag";
+				projTag.textContent = card.project;
+				meta.appendChild(projTag);
+			}
 			cardEl.appendChild(meta);
 		}
+	}
+
+	function createOwnerBadge(owner) {
+		const def = OWNER_DEFS.find((o) => o.key === owner);
+		const badge = document.createElement("span");
+		badge.className = "kanban-owner-badge";
+		if (def?.color) {
+			badge.style.color = def.color;
+			badge.style.background = def.color + "26";
+		}
+		badge.textContent = def?.label || owner;
+		return badge;
 	}
 
 	function createStatusBadge(card) {
@@ -4779,6 +4809,53 @@ async function init() {
 		metaRow.appendChild(prioSelect);
 		cardModalContent.appendChild(metaRow);
 
+		// Owner / Ball holder row
+		const ownerRow = document.createElement("div");
+		ownerRow.className = "kanban-modal-row";
+		const ownerLabel = document.createElement("span");
+		ownerLabel.className = "kanban-modal-label";
+		ownerLabel.textContent = "Ball";
+		ownerRow.appendChild(ownerLabel);
+
+		const ownerSelect = document.createElement("div");
+		ownerSelect.className = "kanban-owner-group";
+		let currentOwner = card.owner || "";
+		for (const o of OWNER_DEFS) {
+			const btn = document.createElement("button");
+			btn.type = "button";
+			btn.className = "kanban-owner-btn";
+			if (o.key) btn.classList.add(`kanban-owner-${o.key}`);
+			if (currentOwner === o.key) btn.classList.add("kanban-owner-active");
+			btn.textContent = o.label;
+			btn.addEventListener("click", (e) => {
+				e.stopPropagation();
+				currentOwner = o.key;
+				ownerSelect.querySelectorAll(".kanban-owner-btn").forEach((b) =>
+					b.classList.remove("kanban-owner-active"),
+				);
+				btn.classList.add("kanban-owner-active");
+			});
+			ownerSelect.appendChild(btn);
+		}
+		ownerRow.appendChild(ownerSelect);
+		cardModalContent.appendChild(ownerRow);
+
+		// Project row
+		const projRow = document.createElement("div");
+		projRow.className = "kanban-modal-row";
+		const projLabel = document.createElement("span");
+		projLabel.className = "kanban-modal-label";
+		projLabel.textContent = "Project";
+		projRow.appendChild(projLabel);
+		const projInput = document.createElement("input");
+		projInput.type = "text";
+		projInput.className = "kanban-field-title";
+		projInput.style.flex = "1";
+		projInput.placeholder = "Project name";
+		projInput.value = card.project || "";
+		projRow.appendChild(projInput);
+		cardModalContent.appendChild(projRow);
+
 		// Status row (if AI task)
 		if (card.ai || card.tileId) {
 			const statusRow = document.createElement("div");
@@ -4823,6 +4900,8 @@ async function init() {
 			card.title = titleInput.value.trim();
 			card.due = dueInput.value || "";
 			card.priority = currentPrio;
+			card.owner = currentOwner;
+			card.project = projInput.value.trim();
 			card.notes = notesArea.value;
 			closeCardModal();
 			renderKanban();
@@ -4842,6 +4921,8 @@ async function init() {
 			card.notes = notesArea.value;
 			card.due = dueInput.value || "";
 			card.priority = currentPrio;
+			card.owner = currentOwner;
+			card.project = projInput.value.trim();
 			if (card.tileId) {
 				const t = getTile(card.tileId);
 				if (t) { closeCardModal(); closeScratchpad(); panToTile(t, true); }
@@ -5015,7 +5096,38 @@ async function init() {
 			if (!kanbanState.zoneColumns) kanbanState.zoneColumns = createDefaultZoneColumns();
 			return kanbanState.zoneColumns;
 		}
+		if (kanbanState.mode === "owner" || kanbanState.mode === "project") {
+			return buildGroupedView(kanbanState.mode);
+		}
 		return kanbanState.columns;
+	}
+
+	/** Build virtual columns by grouping all cards by owner or project */
+	function buildGroupedView(groupBy) {
+		const allCards = [
+			...kanbanState.columns.flatMap((c) => c.cards),
+			...(kanbanState.zoneColumns || []).flatMap((c) => c.cards),
+		];
+		const groups = {};
+		for (const card of allCards) {
+			const key = card[groupBy] || "(unset)";
+			if (!groups[key]) groups[key] = [];
+			groups[key].push(card);
+		}
+		if (groupBy === "owner") {
+			// Fixed order: Self, AI, Client, unset
+			const order = ["self", "ai", "client", "(unset)"];
+			const labels = { self: "Self", ai: "AI", client: "Client", "(unset)": "Unassigned" };
+			return order
+				.filter((k) => groups[k])
+				.map((k) => ({ id: `view-owner-${k}`, title: labels[k] || k, cards: groups[k] }));
+		}
+		// Project: alphabetical
+		return Object.keys(groups).sort().map((k) => ({
+			id: `view-project-${k}`,
+			title: k === "(unset)" ? "No Project" : k,
+			cards: groups[k],
+		}));
 	}
 
 	function createDefaultZoneColumns() {
@@ -5055,6 +5167,20 @@ async function init() {
 		zoneBtn.textContent = "Zone";
 		zoneBtn.addEventListener("click", () => switchKanbanMode("zone"));
 		modeBar.appendChild(zoneBtn);
+
+		const ownerBtn = document.createElement("button");
+		ownerBtn.type = "button";
+		ownerBtn.className = "kanban-mode-btn" + (mode === "owner" ? " kanban-mode-active" : "");
+		ownerBtn.textContent = "Ball";
+		ownerBtn.addEventListener("click", () => switchKanbanMode("owner"));
+		modeBar.appendChild(ownerBtn);
+
+		const projBtn = document.createElement("button");
+		projBtn.type = "button";
+		projBtn.className = "kanban-mode-btn" + (mode === "project" ? " kanban-mode-active" : "");
+		projBtn.textContent = "Project";
+		projBtn.addEventListener("click", () => switchKanbanMode("project"));
+		modeBar.appendChild(projBtn);
 
 		// Spacer to push copy button to the right
 		const spacer = document.createElement("div");
@@ -5123,6 +5249,20 @@ async function init() {
 			count.className = "kanban-column-count";
 			count.textContent = String(col.cards.length);
 			header.appendChild(count);
+
+			// Ball holder summary for zone mode
+			if (mode === "zone" && col.cards.length > 0) {
+				const ballSummary = document.createElement("span");
+				ballSummary.className = "kanban-ball-summary";
+				const ownerCounts = {};
+				for (const c of col.cards) {
+					if (c.owner) ownerCounts[c.owner] = (ownerCounts[c.owner] || 0) + 1;
+				}
+				const OWNER_ICONS = { self: "\u{1F9D1}", ai: "\u{1F916}", client: "\u{1F465}" };
+				const parts = Object.entries(ownerCounts).map(([k, v]) => `${OWNER_ICONS[k] || k}${v}`);
+				if (parts.length) ballSummary.textContent = parts.join(" ");
+				header.appendChild(ballSummary);
+			}
 
 			if (col.cards.length > 0) {
 				const copyColBtn = document.createElement("button");
