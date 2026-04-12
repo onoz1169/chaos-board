@@ -4814,7 +4814,7 @@ async function init() {
 		ownerRow.className = "kanban-modal-row";
 		const ownerLabel = document.createElement("span");
 		ownerLabel.className = "kanban-modal-label";
-		ownerLabel.textContent = "Ball";
+		ownerLabel.textContent = "Owner";
 		ownerRow.appendChild(ownerLabel);
 
 		const ownerSelect = document.createElement("div");
@@ -5171,7 +5171,7 @@ async function init() {
 		const ownerBtn = document.createElement("button");
 		ownerBtn.type = "button";
 		ownerBtn.className = "kanban-mode-btn" + (mode === "owner" ? " kanban-mode-active" : "");
-		ownerBtn.textContent = "Ball";
+		ownerBtn.textContent = "Owner";
 		ownerBtn.addEventListener("click", () => switchKanbanMode("owner"));
 		modeBar.appendChild(ownerBtn);
 
