@@ -1376,6 +1376,7 @@ async function init() {
 			const menuItems = [
 				{ id: "duplicate", label: "Duplicate" },
 				{ id: "bring-to-front", label: "Bring to Front" },
+				...(tile.type === "term" ? [{ separator: true }, { id: "link-sticky", label: "→ Link sticky note" }] : []),
 				{ separator: true },
 				{ id: "delete", label: "Delete" },
 			];
@@ -1390,6 +1391,16 @@ async function init() {
 				saveCanvasDebounced();
 			} else if (selected === "delete") {
 				closeCanvasTile(tile.id);
+			} else if (selected === "link-sticky") {
+				const offset = (tile.width || 400) + 40;
+				const sticky = createTextTile(tile.x + offset, tile.y);
+				if (sticky) {
+					addConnection({ fromTileId: tile.id, fromEdge: "right", toTileId: sticky.id, toEdge: "left" });
+					renderConnections(connections, tiles, canvasX, canvasY, canvasScale);
+					saveCanvasDebounced();
+					const textEl = tileDOMs.get(sticky.id)?.contentArea?.querySelector(".sticky-text");
+					if (textEl) setTimeout(() => textEl.focus(), 50);
+				}
 			}
 		});
 
@@ -1452,6 +1463,7 @@ async function init() {
 		if (fontUpBtn) fontUpBtn.addEventListener("click", (e) => { e.stopPropagation(); adjustFont(1); });
 
 		saveCanvasImmediate();
+		return tile;
 	}
 
 	function closeCanvasTile(id) {
@@ -2960,7 +2972,8 @@ async function init() {
 		if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey
 			&& e.key >= "1" && e.key <= "5"
 			&& document.activeElement?.tagName !== "INPUT"
-			&& document.activeElement?.tagName !== "TEXTAREA") {
+			&& document.activeElement?.tagName !== "TEXTAREA"
+			&& !document.activeElement?.isContentEditable) {
 			const zones = getZones();
 			const idx = parseInt(e.key) - 1;
 			if (idx < zones.length) {
@@ -5463,6 +5476,110 @@ async function init() {
 	}
 
 	renderKanban();
+
+	// ── Object List Panel ──
+
+	const TILE_TYPE_ICON = {
+		term: "▣",
+		text: "N",
+		browser: "W",
+		shape: "◇",
+		note: "≡",
+		code: "<>",
+		image: "⬜",
+		graph: "⬡",
+	};
+
+	let buildTileListTimer = null;
+	function buildTileList() {
+		clearTimeout(buildTileListTimer);
+		buildTileListTimer = setTimeout(_buildTileListNow, 80);
+	}
+
+	function _buildTileListNow() {
+		const body = document.getElementById("tile-list-body");
+		if (!body) return;
+		body.innerHTML = "";
+		if (tiles.length === 0) {
+			const empty = document.createElement("div");
+			empty.style.cssText = "padding:8px 12px;font-size:11px;color:var(--muted);";
+			empty.textContent = "No tiles yet";
+			body.appendChild(empty);
+			return;
+		}
+
+		const childMap = new Map();
+		const hasParent = new Set();
+		for (const conn of connections) {
+			if (!childMap.has(conn.fromTileId)) childMap.set(conn.fromTileId, new Set());
+			childMap.get(conn.fromTileId).add(conn.toTileId);
+			hasParent.add(conn.toTileId);
+		}
+
+		const roots = tiles.filter(t => !hasParent.has(t.id));
+		const rendered = new Set();
+
+		function renderTileRow(t, depth) {
+			if (rendered.has(t.id)) return;
+			rendered.add(t.id);
+
+			const label = getTileLabel(t);
+			const btn = document.createElement("button");
+			btn.className = "tile-list-item";
+			btn.title = label.name;
+
+			const prefix = document.createElement("span");
+			prefix.className = "tile-list-type";
+
+			if (depth > 0) {
+				btn.classList.add("tile-list-item--child");
+				btn.style.paddingLeft = `${12 + depth * 14}px`;
+				prefix.textContent = "└ ";
+				const icon = document.createElement("span");
+				icon.className = "tile-list-type";
+				icon.textContent = TILE_TYPE_ICON[t.type] || t.type;
+				btn.appendChild(prefix);
+				btn.appendChild(icon);
+			} else {
+				prefix.textContent = TILE_TYPE_ICON[t.type] || t.type;
+				btn.appendChild(prefix);
+			}
+
+			const name = document.createElement("span");
+			name.className = "tile-list-name";
+			name.textContent = label.name;
+			btn.appendChild(name);
+
+			btn.addEventListener("click", () => {
+				executeCanvasRpc("jumpToTile", { tileId: t.id });
+			});
+			body.appendChild(btn);
+
+			const childIds = childMap.get(t.id);
+			if (childIds) {
+				for (const childId of childIds) {
+					const child = getTile(childId);
+					if (child) renderTileRow(child, depth + 1);
+				}
+			}
+		}
+
+		for (const t of roots) renderTileRow(t, 0);
+		for (const t of tiles) {
+			if (!rendered.has(t.id)) renderTileRow(t, 0);
+		}
+	}
+
+	const tileLayerForList = document.getElementById("tile-layer");
+	if (tileLayerForList) {
+		new MutationObserver(buildTileList).observe(tileLayerForList, { childList: true });
+	}
+	const connLayerForList = document.getElementById("connection-layer");
+	if (connLayerForList) {
+		new MutationObserver(buildTileList).observe(connLayerForList, { childList: true });
+	}
+	document.addEventListener("tile-label-change", buildTileList);
+	_buildTileListNow();
 }
 
 async function checkFirstLaunchDialog() {

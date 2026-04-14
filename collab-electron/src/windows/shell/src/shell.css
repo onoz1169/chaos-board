@@ -173,6 +173,79 @@ body {
 	z-index: 110;
 }
 
+/* ── Object List Panel ── */
+
+#tile-list-panel {
+	flex-shrink: 0;
+	border-bottom: 1px solid var(--border);
+	display: flex;
+	flex-direction: column;
+	max-height: 38%;
+	overflow: hidden;
+}
+
+#tile-list-header {
+	padding: 5px 12px;
+	font-size: 10px;
+	font-weight: 600;
+	color: var(--muted);
+	letter-spacing: 1.5px;
+	text-transform: uppercase;
+	user-select: none;
+	-webkit-user-select: none;
+	border-bottom: 1px solid var(--border);
+	flex-shrink: 0;
+}
+
+#tile-list-body {
+	overflow-y: auto;
+	flex: 1;
+	min-height: 0;
+	padding: 3px 0;
+}
+
+.tile-list-item {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding: 4px 12px;
+	cursor: pointer;
+	font-size: 12px;
+	color: var(--muted);
+	white-space: nowrap;
+	overflow: hidden;
+	border: none;
+	background: transparent;
+	width: 100%;
+	text-align: left;
+	font-family: var(--font-mono);
+	border-radius: 3px;
+}
+
+.tile-list-item:hover {
+	background: rgba(128, 128, 128, 0.1);
+	color: var(--fg);
+}
+
+.tile-list-type {
+	font-size: 10px;
+	opacity: 0.45;
+	flex-shrink: 0;
+	min-width: 14px;
+}
+
+/* child indent prefix (└) */
+.tile-list-item--child .tile-list-type:first-child {
+	opacity: 0.25;
+	font-size: 9px;
+}
+
+.tile-list-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 /* ── Nav toolbar ── */
 
 #nav-toolbar {
