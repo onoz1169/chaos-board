@@ -1,6 +1,7 @@
-import { describe, test, expect, afterEach } from "bun:test";
+import { describe, test, expect, afterEach, mock } from "bun:test";
 import * as fs from "node:fs";
 import {
+  getTmuxBin,
   getTmuxConf,
   writeSessionMeta,
   readSessionMeta,
@@ -186,5 +187,43 @@ describe("stripTrailingBlanks via scrollback", () => {
     ).toBe(true);
 
     killSession(sessionId);
+  });
+});
+
+describe("getTmuxBin packaged fallback", () => {
+  test("falls back to 'tmux' on PATH when bundled binary missing", () => {
+    // Point resourcesPath at a directory that does NOT contain a
+    // "tmux" file, simulating a production build where the
+    // extraResources config failed to ship the bundled binary.
+    const originalResourcesPath = (process as unknown as {
+      resourcesPath: string;
+    }).resourcesPath;
+    const emptyDir = fs.mkdtempSync("/tmp/tmux-bin-test-");
+
+    // Mock the electron module so getApp() returns an
+    // isPackaged: true stub.
+    mock.module("electron", () => ({
+      app: { isPackaged: true },
+    }));
+
+    try {
+      (process as unknown as {
+        resourcesPath: string;
+      }).resourcesPath = emptyDir;
+
+      // Sanity: bundled path truly does not exist.
+      expect(fs.existsSync(`${emptyDir}/tmux`)).toBe(false);
+
+      expect(getTmuxBin()).toBe("tmux");
+    } finally {
+      (process as unknown as {
+        resourcesPath: string;
+      }).resourcesPath = originalResourcesPath;
+      try {
+        fs.rmdirSync(emptyDir);
+      } catch {
+        // no-op
+      }
+    }
   });
 });

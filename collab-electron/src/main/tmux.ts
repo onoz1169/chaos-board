@@ -28,7 +28,13 @@ function getApp(): typeof import("electron").app | null {
 export function getTmuxBin(): string {
   const app = getApp();
   if (app?.isPackaged) {
-    return path.join(process.resourcesPath, "tmux");
+    const bundled = path.join(process.resourcesPath, "tmux");
+    if (fs.existsSync(bundled)) {
+      return bundled;
+    }
+    // Bundled tmux missing (extraResources didn't ship it);
+    // fall back to system tmux on PATH.
+    return "tmux";
   }
   return "tmux";
 }
