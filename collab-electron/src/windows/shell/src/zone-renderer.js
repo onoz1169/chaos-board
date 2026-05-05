@@ -27,7 +27,7 @@ const ROW = 40;
 
 export const W1H_LABELS = ["WHY", "WHAT", "WHO", "WHERE", "WHEN", "HOW"];
 
-const ZONES = [
+export const ZONES = [
 	{
 		id: "zone-intelligence",
 		label: "INTELLIGENCE",
@@ -89,8 +89,99 @@ const zoneDOMs = new Map();
 /** @type {Map<string, HTMLDivElement>} */
 const summaryDOMs = new Map();
 
+/** @type {Map<string, HTMLDivElement>} */
+const labelDOMs = new Map();
+
+/** @type {Record<string, string>} — カスタムラベルのみ保持（デフォルト値は含まない） */
+const customLabels = {};
+
+/**
+ * ゾーンのラベルを返す。カスタムラベルがあればそれを、なければデフォルトを返す。
+ * @param {string} zoneId
+ * @returns {string}
+ */
+export function getZoneLabel(zoneId) {
+	if (customLabels[zoneId] !== undefined) return customLabels[zoneId];
+	const zone = ZONES.find((z) => z.id === zoneId);
+	return zone ? zone.label : zoneId;
+}
+
+/**
+ * カスタムラベルをメモリに保存し、DOM上のラベル要素も即時更新する。
+ * @param {string} zoneId
+ * @param {string} label
+ */
+export function setZoneLabel(zoneId, label) {
+	const zone = ZONES.find((z) => z.id === zoneId);
+	const defaultLabel = zone ? zone.label : zoneId;
+	if (label && label !== defaultLabel) {
+		customLabels[zoneId] = label;
+	} else {
+		delete customLabels[zoneId];
+	}
+	const labelEl = labelDOMs.get(zoneId);
+	if (labelEl) {
+		labelEl.textContent = label || defaultLabel;
+	}
+}
+
+/**
+ * 現在のカスタムラベルをまとめて返す（デフォルト値のままのゾーンは含まない）。
+ * @returns {Record<string, string>}
+ */
+export function getZoneLabels() {
+	return { ...customLabels };
+}
+
+/**
+ * 保存済みラベルをロード時に適用する。
+ * @param {Record<string, string>} labels
+ */
+export function loadZoneLabels(labels) {
+	for (const [zoneId, label] of Object.entries(labels)) {
+		setZoneLabel(zoneId, label);
+	}
+}
+
 export function getZones() {
 	return ZONES;
+}
+
+/**
+ * ゾーンのx,y位置をメモリ上で更新し、DOMに即時反映する。
+ * repositionZones は panX/panY/zoom が必要なので、カスタムイベントで要求する。
+ * @param {string} zoneId
+ * @param {number} x
+ * @param {number} y
+ */
+export function setZonePosition(zoneId, x, y) {
+	const zone = ZONES.find(z => z.id === zoneId);
+	if (!zone) return;
+	zone.x = x;
+	zone.y = y;
+	document.dispatchEvent(new CustomEvent('zone-position-change', { bubbles: true }));
+}
+
+/**
+ * 全ゾーンの現在位置を返す。
+ * @returns {Record<string, { x: number; y: number }>}
+ */
+export function getZonePositions() {
+	return Object.fromEntries(ZONES.map(z => [z.id, { x: z.x, y: z.y }]));
+}
+
+/**
+ * 保存済み位置をロードして適用する。
+ * @param {Record<string, { x: number; y: number }>} positions
+ */
+export function loadZonePositions(positions) {
+	for (const [id, pos] of Object.entries(positions)) {
+		const zone = ZONES.find(z => z.id === id);
+		if (zone) {
+			zone.x = pos.x;
+			zone.y = pos.y;
+		}
+	}
 }
 
 /**
@@ -158,9 +249,61 @@ export function initZoneLayer() {
 
 		const label = document.createElement("div");
 		label.className = "canvas-zone-label";
-		label.textContent = zone.label;
+		label.textContent = getZoneLabel(zone.id);
 		label.style.color = zone.borderColor;
+		label.title = "ダブルクリックでラベルを編集";
 		el.appendChild(label);
+		labelDOMs.set(zone.id, label);
+
+		// ダブルクリックでインライン編集
+		label.addEventListener("dblclick", (e) => {
+			e.stopPropagation();
+			const prevText = label.textContent;
+			label.contentEditable = "true";
+			label.style.cursor = "text";
+			label.style.outline = "2px solid " + zone.borderColor;
+			label.style.borderRadius = "2px";
+			label.focus();
+			// テキスト全選択
+			const range = document.createRange();
+			range.selectNodeContents(label);
+			const sel = window.getSelection();
+			sel.removeAllRanges();
+			sel.addRange(range);
+
+			function commit() {
+				const newText = label.textContent.trim();
+				label.contentEditable = "false";
+				label.style.cursor = "";
+				label.style.outline = "";
+				label.style.borderRadius = "";
+				setZoneLabel(zone.id, newText || prevText);
+				// 変更をrenderer.jsに通知してcanvasを保存させる
+				el.dispatchEvent(new CustomEvent("zone-label-change", { bubbles: true }));
+			}
+
+			function cancel() {
+				label.contentEditable = "false";
+				label.style.cursor = "";
+				label.style.outline = "";
+				label.style.borderRadius = "";
+				label.textContent = prevText;
+			}
+
+			label.addEventListener("keydown", (ev) => {
+				if (ev.key === "Enter") {
+					ev.preventDefault();
+					label.blur();
+				} else if (ev.key === "Escape") {
+					ev.preventDefault();
+					cancel();
+				}
+			}, { once: true });
+
+			label.addEventListener("blur", () => {
+				if (label.contentEditable === "true") commit();
+			}, { once: true });
+		});
 
 		const areaLabel = document.createElement("div");
 		areaLabel.className = "canvas-zone-area-label";

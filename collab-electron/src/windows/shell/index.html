@@ -41,6 +41,15 @@
 				<div id="tile-list-header">Objects</div>
 				<div id="tile-list-body"></div>
 			</div>
+			<!-- #zone-layout-panel はフローティング版に移行のためコメントアウト
+			<div id="zone-layout-panel">
+				<div id="zone-layout-header">
+					<span>Zone Layout</span>
+					<button type="button" id="zone-layout-toggle-btn" title="Toggle Zone Layout">&#x25E6;</button>
+				</div>
+				<div id="zone-layout-body"></div>
+			</div>
+			-->
 		</div>
 		<div id="nav-resize" class="resize-handle" data-panel="nav"></div>
 		<div id="panel-viewer">
@@ -107,6 +116,9 @@
 		<button type="button" class="pen-dock-icon" id="tool-layout-btn" data-tool="layout" data-tooltip="Auto Layout (Cmd+Shift+A)">
 			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
 		</button>
+		<button type="button" class="pen-dock-icon" id="tool-zone-layout-btn" data-tooltip="Zone Layout">
+			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="9" height="18" rx="1.5"/><rect x="13" y="3" width="9" height="8" rx="1.5"/><rect x="13" y="13" width="9" height="8" rx="1.5"/></svg>
+		</button>
 		<div class="pen-dock-separator"></div>
 		<select id="launch-tool-select" class="dock-select">
 			<option value="claude">Claude Code (YOLO)</option>
@@ -153,6 +165,15 @@
 			</div>
 			<div class="shortcut-modal-body"></div>
 		</div>
+	</div>
+
+	<!-- Zone Layout フローティングオーバーレイ -->
+	<div id="zone-layout-float" class="hidden">
+		<div id="zone-layout-float-header">
+			<span id="zone-layout-float-title">Zone Layout</span>
+			<button type="button" id="zone-layout-float-close">&#x2715;</button>
+		</div>
+		<div id="zone-layout-float-body"></div>
 	</div>
 
 	<div id="resize-overlay"></div>

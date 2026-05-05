@@ -246,6 +246,251 @@ body {
 	white-space: nowrap;
 }
 
+/* ── Tile List Zone Group Headers ── */
+
+.tile-list-zone-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 8px;
+	cursor: pointer;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.05em;
+	border-left: 3px solid transparent;
+	color: #aaa;
+	user-select: none;
+	-webkit-user-select: none;
+	margin-top: 8px;
+}
+
+.tile-list-zone-section:first-child .tile-list-zone-header {
+	margin-top: 0;
+}
+
+.tile-list-zone-badge {
+	font-size: 10px;
+	background: rgba(255, 255, 255, 0.1);
+	border-radius: 8px;
+	padding: 1px 5px;
+}
+
+.tile-list-zone-collapsed .tile-list-zone-items {
+	display: none;
+}
+
+/* ── Zone Layout Panel ── */
+
+#zone-layout-panel {
+	flex-shrink: 0;
+	border-bottom: 1px solid var(--border);
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+#zone-layout-header {
+	padding: 5px 12px;
+	font-size: 10px;
+	font-weight: 600;
+	color: var(--muted);
+	letter-spacing: 1.5px;
+	text-transform: uppercase;
+	user-select: none;
+	-webkit-user-select: none;
+	border-bottom: 1px solid var(--border);
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	cursor: pointer;
+}
+
+#zone-layout-header:hover {
+	background: rgba(128, 128, 128, 0.07);
+}
+
+#zone-layout-toggle-btn {
+	background: transparent;
+	border: none;
+	color: var(--muted);
+	font-size: 14px;
+	cursor: pointer;
+	padding: 0 2px;
+	line-height: 1;
+	opacity: 0.6;
+	transition: opacity 0.1s;
+}
+
+#zone-layout-toggle-btn:hover {
+	opacity: 1;
+}
+
+#zone-layout-body {
+	display: flex;
+	flex-direction: column;
+	padding: 0;
+	overflow: hidden;
+}
+
+#zone-layout-body.collapsed {
+	display: none;
+}
+
+/* ── ミニマップエディタ ── */
+
+#zone-layout-map {
+	position: relative;
+	background: #1a1a2e;
+	border-radius: 8px;
+	overflow: hidden;
+	margin: 8px;
+	flex: 1;
+	/* height は JS で動的計算 */
+	background-image:
+		radial-gradient(circle, rgba(255,255,255,0.12) 1px, transparent 1px);
+	background-size: 12px 12px;
+}
+
+.zone-layout-map-card {
+	position: absolute;
+	border-radius: 6px;
+	cursor: grab;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	user-select: none;
+	-webkit-user-select: none;
+	transition: box-shadow 0.1s;
+	box-sizing: border-box;
+}
+
+.zone-layout-map-card:active {
+	cursor: grabbing;
+	box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+
+.zone-layout-map-card-name {
+	pointer-events: auto;
+	cursor: text;
+	font-size: 9px;
+	font-weight: 700;
+	color: #fff;
+	text-align: center;
+	letter-spacing: 0.05em;
+	text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+	padding: 2px;
+	word-break: break-word;
+}
+
+.zone-layout-reset-btn {
+	margin: 4px 8px 8px;
+	padding: 4px 10px;
+	font-size: 11px;
+	background: rgba(255,255,255,0.08);
+	border: 1px solid rgba(255,255,255,0.15);
+	border-radius: 4px;
+	color: #aaa;
+	cursor: pointer;
+	width: calc(100% - 16px);
+	box-sizing: border-box;
+}
+
+.zone-layout-reset-btn:hover {
+	background: rgba(255,255,255,0.13);
+}
+
+/* 旧カードスタイル（未使用だが念のため残す） */
+.zone-layout-card {
+	display: none;
+}
+
+.zone-layout-card-name-input {
+	width: 100%;
+	font-size: 10px;
+	font-weight: 700;
+	background: transparent;
+	border: none;
+	border-bottom: 1px solid #888;
+	color: #fff;
+	text-align: center;
+	outline: none;
+	font-family: var(--font-mono);
+}
+
+/* ── Zone Layout フローティングオーバーレイ ── */
+
+#zone-layout-float {
+	position: fixed;
+	top: 80px;
+	left: 50%;
+	transform: translateX(-50%);
+	width: calc(100vw - 80px);
+	height: calc(100vh - 100px);
+	min-height: 320px;
+	top: 50px;
+	left: 40px;
+	transform: none;
+	background: #1e1e2e;
+	border: 1px solid rgba(255,255,255,0.15);
+	border-radius: 12px;
+	box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+	z-index: 10000;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	resize: both;
+}
+
+#zone-layout-float.hidden {
+	display: none;
+}
+
+#zone-layout-float-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 10px 14px;
+	background: rgba(255,255,255,0.05);
+	cursor: move;
+	user-select: none;
+	-webkit-user-select: none;
+	border-bottom: 1px solid rgba(255,255,255,0.1);
+	flex-shrink: 0;
+}
+
+#zone-layout-float-title {
+	font-size: 13px;
+	font-weight: 600;
+	color: #ddd;
+	letter-spacing: 0.05em;
+}
+
+#zone-layout-float-close {
+	background: none;
+	border: none;
+	color: #888;
+	cursor: pointer;
+	font-size: 14px;
+	padding: 2px 6px;
+	border-radius: 4px;
+	line-height: 1;
+}
+
+#zone-layout-float-close:hover {
+	background: rgba(255,255,255,0.1);
+	color: #fff;
+}
+
+#zone-layout-float-body {
+	flex: 1;
+	overflow: auto;
+	display: flex;
+	flex-direction: column;
+}
+
+/* zone-layout-float 内のミニマップとリセットボタンはサイドパネル版と共通スタイルを流用 */
+
 /* ── Nav toolbar ── */
 
 #nav-toolbar {

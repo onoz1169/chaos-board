@@ -16,7 +16,7 @@ import {
 	fromJSON as groupsFromJSON,
 } from "./group-state.js";
 import { initGroupLayer, renderGroups } from "./group-renderer.js";
-import { initZoneLayer, repositionZones, getTilesInZone, getZoneAtPoint, flashZone, getZones, getZoneCenter, updateZoneSummaries, ZONE_H, W1H_ROW_H, TOTAL_ZONE_H, W1H_LABELS } from "./zone-renderer.js";
+import { initZoneLayer, repositionZones, getTilesInZone, getZoneAtPoint, flashZone, getZones, getZoneCenter, updateZoneSummaries, ZONE_H, W1H_ROW_H, TOTAL_ZONE_H, W1H_LABELS, getZoneLabels, loadZoneLabels, getZoneLabel, setZoneLabel, ZONES, setZonePosition, getZonePositions, loadZonePositions } from "./zone-renderer.js";
 import { strokes as penStrokes, clearStrokes as clearPenStrokes, undoStroke, toJSON as penStrokesToJSON, fromJSON as penStrokesFromJSON } from "./pen-stroke-state.js";
 import { initPenOverlay, redraw as redrawPenOverlay, togglePenMode, isPenMode, setPenMode, setPenTool } from "./pen-overlay.js";
 import { connections, addConnection, removeConnection, getConnectionsForTile, toJSON as connectionsToJSON, fromJSON as connectionsFromJSON } from "./connection-state.js";
@@ -569,6 +569,23 @@ async function init() {
 	const tileLayer = document.getElementById("tile-layer");
 	const groupLayer = document.getElementById("group-layer");
 	initZoneLayer();
+	// ゾーンラベルが変更されたらcanvasを保存する
+	{
+		const zoneLayer = document.getElementById("zone-layer");
+		if (zoneLayer) {
+			zoneLayer.addEventListener("zone-label-change", () => saveCanvasDebounced());
+			// Zone Layout Panel からのジャンプリクエストを処理する
+			zoneLayer.addEventListener("zone-layout-jump", (e) => {
+				const zoneId = e.detail && e.detail.zoneId;
+				if (zoneId) executeCanvasRpc("jumpToZone", { zoneId });
+			});
+		}
+		// ゾーン位置が変更されたら現在のビューポートで再配置し、保存する
+		document.addEventListener('zone-position-change', () => {
+			repositionZones(canvasX, canvasY, canvasScale);
+			saveCanvasDebounced();
+		});
+	}
 	initConnectionLayer(canvasEl);
 
 	// Right-click on connection paths to delete or toggle style
@@ -771,6 +788,8 @@ async function init() {
 			connections: connectionsToJSON(),
 			scratchpad: getScratchpadStateForSave(),
 			kanban: getKanbanStateForSave(),
+			zoneLabels: getZoneLabels(),
+			zonePositions: getZonePositions(),
 		};
 	}
 
@@ -2645,6 +2664,17 @@ async function init() {
 		// Restore kanban
 		if (savedState.kanban) {
 			restoreKanbanState(savedState.kanban);
+		}
+
+		// Restore zone labels
+		if (savedState.zoneLabels) {
+			loadZoneLabels(savedState.zoneLabels);
+		}
+
+		// Restore zone positions
+		if (savedState.zonePositions) {
+			loadZonePositions(savedState.zonePositions);
+			repositionZones(canvasX, canvasY, canvasScale);
 		}
 
 		// All data restored — enable saving
@@ -5477,6 +5507,340 @@ async function init() {
 
 	renderKanban();
 
+	// ── Zone Layout フローティングオーバーレイ ──
+
+	(function initZoneLayoutFloat() {
+		const floatEl = document.getElementById("zone-layout-float");
+		const floatHeader = document.getElementById("zone-layout-float-header");
+		const floatBody = document.getElementById("zone-layout-float-body");
+		const closeBtn = document.getElementById("zone-layout-float-close");
+		if (!floatEl || !floatHeader || !floatBody) return;
+
+		// デフォルト位置（横5列・リセット用）
+		const DEFAULT_POSITIONS = {
+			"zone-intelligence": { x: 40,    y: 0 },
+			"zone-hunt":         { x: 5240,  y: 0 },
+			"zone-blacksmith":   { x: 10440, y: 0 },
+			"zone-rest":         { x: 15640, y: 0 },
+			"zone-reflect":      { x: 20840, y: 0 },
+		};
+
+		let mapEl = null;
+		const cardEls = new Map(); // zoneId → cardEl
+
+		// 全ゾーンのバウンディングボックスを元に、ゾーンが中央に来るtransformを計算
+		function getTransform() {
+			if (!mapEl) return { scale: 1, offsetX: 0, offsetY: 0 };
+			const zones = getZones();
+			let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+			for (const z of zones) {
+				minX = Math.min(minX, z.x);
+				minY = Math.min(minY, z.y);
+				maxX = Math.max(maxX, z.x + z.width);
+				maxY = Math.max(maxY, z.y + z.height);
+			}
+			const zonesW = Math.max(maxX - minX, 1);
+			const zonesH = Math.max(maxY - minY, 1);
+			// ゾーン範囲の周囲に50%のパディングを確保
+			const padX = zonesW * 0.6;
+			const padY = zonesH * 0.6;
+			const virtualMinX = minX - padX;
+			const virtualMinY = minY - padY;
+			const virtualW = zonesW + padX * 2;
+			const virtualH = zonesH + padY * 2;
+
+			const mapRect = mapEl.getBoundingClientRect();
+			const mapW = mapRect.width  || mapEl.offsetWidth  || 400;
+			const mapH = mapRect.height || mapEl.offsetHeight || 300;
+			const scale = Math.min(mapW / virtualW, mapH / virtualH);
+			return { scale, offsetX: virtualMinX, offsetY: virtualMinY };
+		}
+
+		function renderZoneLayoutFloat() {
+			floatBody.innerHTML = "";
+
+			mapEl = document.createElement("div");
+			mapEl.id = "zone-layout-map";
+			floatBody.appendChild(mapEl);
+
+			requestAnimationFrame(() => { buildCards(); });
+
+			const resetBtn = document.createElement("button");
+			resetBtn.type = "button";
+			resetBtn.className = "zone-layout-reset-btn";
+			resetBtn.textContent = "Reset Layout";
+			resetBtn.addEventListener("click", () => {
+				for (const zone of getZones()) {
+					const def = DEFAULT_POSITIONS[zone.id];
+					if (def) setZonePosition(zone.id, def.x, def.y);
+				}
+				refreshCards();
+			});
+			floatBody.appendChild(resetBtn);
+		}
+
+		function buildCards() {
+			if (!mapEl) return;
+			mapEl.innerHTML = "";
+			cardEls.clear();
+			const t = getTransform();
+			for (const zone of getZones()) {
+				const card = buildCard(zone, t);
+				mapEl.appendChild(card);
+				cardEls.set(zone.id, card);
+			}
+		}
+
+		function buildCard(zone, t) {
+			const card = document.createElement("div");
+			card.className = "zone-layout-map-card";
+
+			const cardW = Math.round(zone.width  * t.scale);
+			const cardH = Math.round(zone.height * t.scale);
+			card.style.left = Math.round((zone.x - t.offsetX) * t.scale) + "px";
+			card.style.top  = Math.round((zone.y - t.offsetY) * t.scale) + "px";
+			card.style.width  = cardW + "px";
+			card.style.height = cardH + "px";
+			card.style.background = zone.color.replace(/[\d.]+\)$/, "0.45)");
+			card.style.border = "2px solid " + zone.borderColor;
+
+			const nameEl = document.createElement("div");
+			nameEl.className = "zone-layout-map-card-name";
+			nameEl.textContent = getZoneLabel(zone.id);
+			nameEl.title = "ダブルクリックで名前を変更";
+			// カードのmousedown(preventDefault)がdblclickを妨げないよう伝播を止める
+			nameEl.addEventListener("mousedown", (e) => e.stopPropagation());
+			nameEl.addEventListener("dblclick", (e) => {
+				e.stopPropagation();
+				const input = document.createElement("input");
+				input.className = "zone-layout-card-name-input";
+				input.value = getZoneLabel(zone.id);
+				nameEl.replaceWith(input);
+				input.focus();
+				input.select();
+				const commit = () => {
+					const val = input.value.trim();
+					if (val) setZoneLabel(zone.id, val);
+					input.replaceWith(nameEl);
+					nameEl.textContent = getZoneLabel(zone.id);
+				};
+				input.addEventListener("blur", commit);
+				input.addEventListener("keydown", (ev) => {
+					if (ev.key === "Enter") { ev.preventDefault(); input.blur(); }
+					if (ev.key === "Escape") { input.replaceWith(nameEl); }
+					ev.stopPropagation();
+				});
+			});
+			card.appendChild(nameEl);
+
+			// ゾーンカードのドラッグ実装（パネルドラッグと競合しないよう stopPropagation）
+			card.addEventListener("mousedown", (e) => {
+				if (e.button !== 0) return;
+				e.stopPropagation();
+				e.preventDefault();
+
+				const tr = getTransform(); // ドラッグ開始時点のtransformを使う
+				const startMouseX = e.clientX;
+				const startMouseY = e.clientY;
+				const startZoneX  = zone.x;
+				const startZoneY  = zone.y;
+				const startLeft   = (zone.x - tr.offsetX) * tr.scale;
+				const startTop    = (zone.y - tr.offsetY) * tr.scale;
+
+				// ドラッグ開始時点のゾーン内タイルと初期位置を記録
+				const zoneInitialTileIds = getTilesInZone(zone.id, tiles);
+				const initialTilePositions = {};
+				for (const tileId of zoneInitialTileIds) {
+					const t = getTile(tileId);
+					if (t) initialTilePositions[tileId] = { x: t.x, y: t.y };
+				}
+
+				// ドラッグ開始時点のゾーン内ペンストロークと初期座標を記録
+				const zoneInitialStrokes = penStrokes.filter(s => {
+					const cx = (s.bounds.minX + s.bounds.maxX) / 2;
+					const cy = (s.bounds.minY + s.bounds.maxY) / 2;
+					return cx >= zone.x && cx <= zone.x + zone.width &&
+					       cy >= zone.y && cy <= zone.y + zone.height;
+				});
+				const initialStrokePoints = new Map();
+				const initialStrokeBounds = new Map();
+				for (const s of zoneInitialStrokes) {
+					initialStrokePoints.set(s.id, s.points.map(p => ({ x: p.x, y: p.y, pressure: p.pressure })));
+					initialStrokeBounds.set(s.id, { ...s.bounds });
+				}
+
+				card.style.cursor = "grabbing";
+				card.style.zIndex = "999";
+				card.style.boxShadow = "0 4px 16px rgba(0,0,0,0.5)";
+
+				function onMouseMove(ev) {
+					const dx = ev.clientX - startMouseX;
+					const dy = ev.clientY - startMouseY;
+					const newLeft = startLeft + dx;
+					const newTop  = startTop  + dy;
+					card.style.left = newLeft + "px";
+					card.style.top  = newTop  + "px";
+
+					// ミニマップ座標 → キャンバス座標
+					const newCanvasX = Math.round(newLeft / tr.scale + tr.offsetX);
+					const newCanvasY = Math.round(newTop  / tr.scale + tr.offsetY);
+					const deltaX = newCanvasX - startZoneX;
+					const deltaY = newCanvasY - startZoneY;
+
+					// ゾーン位置を更新
+					setZonePosition(zone.id, newCanvasX, newCanvasY);
+
+					// ゾーン内タイルを同じdeltaで移動
+					for (const tileId of zoneInitialTileIds) {
+						const t = getTile(tileId);
+						if (!t || !initialTilePositions[tileId]) continue;
+						t.x = initialTilePositions[tileId].x + deltaX;
+						t.y = initialTilePositions[tileId].y + deltaY;
+						snapToGrid(t);
+						const dom = tileDOMs.get(tileId);
+						if (dom) {
+							positionTile(dom.container, t, canvasX, canvasY, canvasScale);
+						}
+					}
+
+					// ゾーン内ペンストロークを同じdeltaで移動
+					for (const s of zoneInitialStrokes) {
+						const initPts = initialStrokePoints.get(s.id);
+						const initBounds = initialStrokeBounds.get(s.id);
+						if (!initPts || !initBounds) continue;
+						for (let i = 0; i < s.points.length; i++) {
+							s.points[i].x = initPts[i].x + deltaX;
+							s.points[i].y = initPts[i].y + deltaY;
+						}
+						s.bounds = {
+							minX: initBounds.minX + deltaX,
+							minY: initBounds.minY + deltaY,
+							maxX: initBounds.maxX + deltaX,
+							maxY: initBounds.maxY + deltaY,
+						};
+					}
+					if (zoneInitialStrokes.length > 0) {
+						redrawPenOverlay(canvasX, canvasY, canvasScale);
+					}
+				}
+
+				function onMouseUp() {
+					document.removeEventListener("mousemove", onMouseMove);
+					document.removeEventListener("mouseup", onMouseUp);
+					card.style.cursor = "";
+					card.style.zIndex = "";
+					card.style.boxShadow = "";
+					saveCanvasDebounced();
+				}
+
+				document.addEventListener("mousemove", onMouseMove);
+				document.addEventListener("mouseup", onMouseUp);
+			});
+
+			// クリックでゾーンへジャンプ（ドラッグでない場合）
+			let dragMoved = false;
+			card.addEventListener("mousedown", () => { dragMoved = false; });
+			card.addEventListener("mousemove", () => { dragMoved = true; });
+			card.addEventListener("click", () => {
+				if (dragMoved) return;
+				const center = getZoneCenter(zone.id);
+				if (!center) return;
+				document.getElementById("zone-layer")?.dispatchEvent(
+					new CustomEvent("zone-layout-jump", { bubbles: true, detail: { zoneId: zone.id } })
+				);
+			});
+
+			return card;
+		}
+
+		function refreshCards() {
+			if (!mapEl) return;
+			const t = getTransform();
+			const zones = getZones();
+			for (const zone of zones) {
+				const card = cardEls.get(zone.id);
+				if (!card) continue;
+				card.style.left = Math.round((zone.x - t.offsetX) * t.scale) + "px";
+				card.style.top  = Math.round((zone.y - t.offsetY) * t.scale) + "px";
+				const nameEl = card.querySelector(".zone-layout-map-card-name");
+				if (nameEl) nameEl.textContent = getZoneLabel(zone.id);
+			}
+		}
+
+		// フローティングパネルのドラッグ移動（ヘッダー部分）
+		let panelDragState = null;
+
+		floatHeader.addEventListener("mousedown", (e) => {
+			if (e.target === closeBtn) return;
+			const rect = floatEl.getBoundingClientRect();
+			panelDragState = {
+				startX: e.clientX,
+				startY: e.clientY,
+				origLeft: rect.left,
+				origTop: rect.top,
+			};
+			// transform を解除して絶対位置指定に切り替える
+			floatEl.style.transform = "none";
+			floatEl.style.left = rect.left + "px";
+			floatEl.style.top = rect.top + "px";
+			e.preventDefault();
+		});
+
+		document.addEventListener("mousemove", (e) => {
+			if (!panelDragState) return;
+			floatEl.style.left = (panelDragState.origLeft + e.clientX - panelDragState.startX) + "px";
+			floatEl.style.top  = (panelDragState.origTop  + e.clientY - panelDragState.startY) + "px";
+		});
+
+		document.addEventListener("mouseup", () => {
+			panelDragState = null;
+		});
+
+		// 閉じるボタン
+		if (closeBtn) {
+			closeBtn.addEventListener("click", () => {
+				floatEl.classList.add("hidden");
+				const zoneLayoutBtn = document.getElementById("tool-zone-layout-btn");
+				if (zoneLayoutBtn) zoneLayoutBtn.classList.remove("pen-dock-active");
+			});
+		}
+
+		// 開閉トリガー（pen-dockのZone Layoutボタン）
+		const zoneLayoutBtn = document.getElementById("tool-zone-layout-btn");
+		if (zoneLayoutBtn) {
+			zoneLayoutBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+			zoneLayoutBtn.addEventListener("click", () => {
+				const isHidden = floatEl.classList.contains("hidden");
+				if (isHidden) {
+					floatEl.classList.remove("hidden");
+					zoneLayoutBtn.classList.add("pen-dock-active");
+					// 表示時にミニマップを再描画（パネルサイズが確定してからスケール計算）
+					requestAnimationFrame(() => {
+						if (mapEl) buildCards();
+					});
+				} else {
+					floatEl.classList.add("hidden");
+					zoneLayoutBtn.classList.remove("pen-dock-active");
+				}
+			});
+		}
+
+		// zone-label-change イベントでカードのラベルを再描画
+		const zoneLayerEl = document.getElementById("zone-layer");
+		if (zoneLayerEl) {
+			zoneLayerEl.addEventListener("zone-label-change", () => {
+				refreshCards();
+			});
+		}
+
+		// zone-position-change イベントでカード位置を同期
+		document.addEventListener("zone-position-change", () => {
+			refreshCards();
+		});
+
+		renderZoneLayoutFloat();
+	})();
+
 	// ── Object List Panel ──
 
 	const TILE_TYPE_ICON = {
@@ -5491,6 +5855,9 @@ async function init() {
 	};
 
 	let buildTileListTimer = null;
+	// ゾーンセクションの折りたたみ状態を永続管理（再描画後も維持）
+	const collapsedZones = new Set();
+
 	function buildTileList() {
 		clearTimeout(buildTileListTimer);
 		buildTileListTimer = setTimeout(_buildTileListNow, 80);
@@ -5508,6 +5875,7 @@ async function init() {
 			return;
 		}
 
+		// 親子関係の構築（接続線ベース）
 		const childMap = new Map();
 		const hasParent = new Set();
 		for (const conn of connections) {
@@ -5516,10 +5884,28 @@ async function init() {
 			hasParent.add(conn.toTileId);
 		}
 
-		const roots = tiles.filter(t => !hasParent.has(t.id));
+		// ゾーン別にタイルIDを分類
+		const zoneTileIdSets = new Map();
+		for (const zone of ZONES) {
+			const ids = new Set(getTilesInZone(zone.id, tiles));
+			zoneTileIdSets.set(zone.id, ids);
+		}
+
+		// いずれかのゾーンに属するタイルIDの全集合
+		const assignedTileIds = new Set();
+		for (const ids of zoneTileIdSets.values()) {
+			for (const id of ids) assignedTileIds.add(id);
+		}
+
 		const rendered = new Set();
 
-		function renderTileRow(t, depth) {
+		/**
+		 * タイル行を描画する（親子ツリーを再帰的に展開）。
+		 * @param {object} t - タイルオブジェクト
+		 * @param {number} depth - インデント深さ
+		 * @param {HTMLElement} containerEl - 追加先のDOM要素
+		 */
+		function renderTileRow(t, depth, containerEl) {
 			if (rendered.has(t.id)) return;
 			rendered.add(t.id);
 
@@ -5553,21 +5939,98 @@ async function init() {
 			btn.addEventListener("click", () => {
 				executeCanvasRpc("jumpToTile", { tileId: t.id });
 			});
-			body.appendChild(btn);
+			containerEl.appendChild(btn);
 
 			const childIds = childMap.get(t.id);
 			if (childIds) {
 				for (const childId of childIds) {
 					const child = getTile(childId);
-					if (child) renderTileRow(child, depth + 1);
+					if (child) renderTileRow(child, depth + 1, containerEl);
 				}
 			}
 		}
 
-		for (const t of roots) renderTileRow(t, 0);
-		for (const t of tiles) {
-			if (!rendered.has(t.id)) renderTileRow(t, 0);
+		/**
+		 * ゾーンセクションを描画する。
+		 * @param {string} sectionId - ゾーンID または "unassigned"
+		 * @param {string} sectionLabel - ヘッダーテキスト
+		 * @param {string} borderColor - 左ボーダーの色
+		 * @param {Array} sectionTiles - このセクションに属するタイル配列
+		 */
+		function renderZoneSection(sectionId, sectionLabel, borderColor, sectionTiles) {
+			const section = document.createElement("div");
+			section.className = "tile-list-zone-section";
+			if (collapsedZones.has(sectionId)) {
+				section.classList.add("tile-list-zone-collapsed");
+			}
+
+			// セクションヘッダー
+			const header = document.createElement("div");
+			header.className = "tile-list-zone-header";
+			header.style.borderLeftColor = borderColor;
+
+			const headerLabel = document.createElement("span");
+			headerLabel.className = "tile-list-zone-header-label";
+			headerLabel.textContent = sectionLabel;
+
+			const badge = document.createElement("span");
+			badge.className = "tile-list-zone-badge";
+			badge.textContent = String(sectionTiles.length);
+
+			header.appendChild(headerLabel);
+			header.appendChild(badge);
+
+			header.addEventListener("click", () => {
+				if (collapsedZones.has(sectionId)) {
+					collapsedZones.delete(sectionId);
+					section.classList.remove("tile-list-zone-collapsed");
+				} else {
+					collapsedZones.add(sectionId);
+					section.classList.add("tile-list-zone-collapsed");
+				}
+			});
+
+			section.appendChild(header);
+
+			// タイルアイテムコンテナ
+			const itemsContainer = document.createElement("div");
+			itemsContainer.className = "tile-list-zone-items";
+
+			// このゾーン内でのルートタイルを決定
+			// （親がゾーン外にある場合もルート扱い）
+			const sectionTileIds = new Set(sectionTiles.map(t => t.id));
+			const sectionRoots = sectionTiles.filter(t => {
+				if (!hasParent.has(t.id)) return true;
+				// 親がこのゾーン内にいるかチェック
+				for (const conn of connections) {
+					if (conn.toTileId === t.id && sectionTileIds.has(conn.fromTileId)) {
+						return false;
+					}
+				}
+				return true;
+			});
+
+			for (const t of sectionRoots) renderTileRow(t, 0, itemsContainer);
+			// 未レンダリングの残りタイル（孤立タイル等）を追加
+			for (const t of sectionTiles) {
+				if (!rendered.has(t.id)) renderTileRow(t, 0, itemsContainer);
+			}
+
+			section.appendChild(itemsContainer);
+			body.appendChild(section);
 		}
+
+		// 各ゾーンセクションを ZONES 順で描画
+		for (const zone of ZONES) {
+			const zoneTileIds = zoneTileIdSets.get(zone.id);
+			const zoneTileArr = tiles.filter(t => zoneTileIds.has(t.id));
+			const label = getZoneLabel(zone.id);
+			renderZoneSection(zone.id, label, zone.borderColor, zoneTileArr);
+		}
+
+		// 未配置セクション（どのゾーンにも属さないタイル）
+		const unassignedTiles = tiles.filter(t => !assignedTileIds.has(t.id));
+		renderZoneSection("unassigned", "未配置", "rgba(128,128,128,0.6)", unassignedTiles);
 	}
 
 	const tileLayerForList = document.getElementById("tile-layer");
@@ -5579,6 +6042,8 @@ async function init() {
 		new MutationObserver(buildTileList).observe(connLayerForList, { childList: true });
 	}
 	document.addEventListener("tile-label-change", buildTileList);
+	// ゾーン名が変更されたときもリストを再描画
+	document.addEventListener("zone-label-change", buildTileList);
 	_buildTileListNow();
 }
 

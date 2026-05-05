@@ -31,6 +31,8 @@ interface CanvasState {
     panY: number;
     zoom: number;
   };
+  zoneLabels?: Record<string, string>;
+  zonePositions?: Record<string, { x: number; y: number }>;
 }
 
 export async function loadState(): Promise<CanvasState | null> {
