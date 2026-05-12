@@ -20,8 +20,11 @@ import {
   readdir,
   readFile,
   stat,
+  writeFile,
+  rename,
+  mkdir,
 } from "node:fs/promises";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { basename, dirname, extname, join } from "node:path";
 import { createFileFilter, type FileFilter } from "./file-filter";
 import fm from "front-matter";
@@ -72,6 +75,18 @@ import {
 import { fetchCalendarList, fetchEvents, createEvent, updateEvent } from "./calendar-api";
 import { loadTasks, saveTasks, type TasksData } from "./tasks";
 import { loadMemos, saveMemos, type MemosData } from "./memos";
+import type { CalendarEvent } from "./calendar-api";
+import { COLLAB_DIR } from "./paths";
+
+const CALENDAR_CACHE_FILE = join(COLLAB_DIR, "calendar-cache.json");
+
+async function writeCalendarCache(events: CalendarEvent[], timeMin: string, timeMax: string): Promise<void> {
+  if (!existsSync(COLLAB_DIR)) await mkdir(COLLAB_DIR, { recursive: true });
+  const payload = { updated: new Date().toISOString(), timeMin, timeMax, events };
+  const tmp = join(tmpdir(), `cal-cache-${Date.now()}.json`);
+  await writeFile(tmp, JSON.stringify(payload, null, 2), "utf-8");
+  await rename(tmp, CALENDAR_CACHE_FILE);
+}
 
 const FS_CHANGE_DELETED = 3;
 
@@ -1320,7 +1335,9 @@ export function registerIpcHandlers(config: AppConfig): void {
   });
 
   ipcMain.handle("calendar:fetch-events", async (_event, timeMin: string, timeMax: string, calendarIds?: string[]) => {
-    return fetchEvents(appConfig, timeMin, timeMax, calendarIds);
+    const events = await fetchEvents(appConfig, timeMin, timeMax, calendarIds);
+    writeCalendarCache(events, timeMin, timeMax).catch(() => {});
+    return events;
   });
 
   ipcMain.handle("calendar:create-event", async (_event, input) => {
