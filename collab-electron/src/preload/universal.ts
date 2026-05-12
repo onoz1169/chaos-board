@@ -488,10 +488,10 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.invoke("calendar:create-event", input),
   calendarUpdateEvent: (eventId: string, input: unknown): Promise<unknown> =>
     ipcRenderer.invoke("calendar:update-event", eventId, input),
-  tasksLoad: (): Promise<unknown> =>
-    ipcRenderer.invoke("tasks:load"),
-  tasksSave: (data: unknown): Promise<void> =>
-    ipcRenderer.invoke("tasks:save", data),
+  scratchpadLoad: (): Promise<string> =>
+    ipcRenderer.invoke("scratchpad:load-content"),
+  scratchpadSave: (content: string): Promise<void> =>
+    ipcRenderer.invoke("scratchpad:save-content", content),
   calendarRequestExpand: (widthPx?: number) =>
     ipcRenderer.sendToHost("calendar-tile:request-expand", widthPx),
   calendarRequestRestore: () =>

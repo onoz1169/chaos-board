@@ -1333,6 +1333,11 @@ export function registerIpcHandlers(config: AppConfig): void {
   ipcMain.handle("tasks:load", () => loadTasks());
 
   ipcMain.handle("tasks:save", (_event, data: TasksData) => saveTasks(data));
+
+  ipcMain.handle("scratchpad:load-content", () => canvasPersistence.loadScratchpadContent());
+
+  ipcMain.handle("scratchpad:save-content", (_event, content: string) =>
+    canvasPersistence.saveScratchpadContent(content));
 }
 
 async function readTreeRecursive(

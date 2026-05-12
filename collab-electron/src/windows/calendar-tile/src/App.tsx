@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -8,8 +8,7 @@ import jaLocale from "@fullcalendar/core/locales/ja";
 import { between } from "@holiday-jp/holiday_jp";
 import EventModal from "./EventModal";
 import AuthSetup from "./AuthSetup";
-import TaskPanel, { type TasksData, type TaskItem, ARCHIVE_LIST_ID } from "./TaskPanel";
-import TaskDetailPane from "./TaskDetailPane";
+import MemoPane from "./MemoPane";
 
 interface CalendarEvent {
   id: string;
@@ -40,56 +39,6 @@ interface ModalState {
   defaultAllDay?: boolean;
 }
 
-const DEFAULT_TASKS: TasksData = {
-  version: 1,
-  lists: [{ id: "default", title: "タスク", tasks: [] }],
-};
-
-const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
-
-function isBeforeTodayJST(isoString: string): boolean {
-  const doneJST = new Date(new Date(isoString).getTime() + JST_OFFSET_MS);
-  const todayJST = new Date(Date.now() + JST_OFFSET_MS);
-  todayJST.setUTCHours(0, 0, 0, 0);
-  return doneJST < todayJST;
-}
-
-function msUntilMidnightJST(): number {
-  const nowInJST = Date.now() + JST_OFFSET_MS;
-  const msIntoDay = nowInJST % (24 * 60 * 60 * 1000);
-  return 24 * 60 * 60 * 1000 - msIntoDay;
-}
-
-function archiveDoneTasks(data: TasksData): TasksData {
-  const toArchive: TasksData["lists"][0]["tasks"] = [];
-
-  const updatedLists = data.lists.map((list) => {
-    if (list.id === ARCHIVE_LIST_ID) return list;
-    const kept = list.tasks.filter((t) => {
-      if (t.done && t.doneAt && isBeforeTodayJST(t.doneAt)) {
-        toArchive.push(t);
-        return false;
-      }
-      return true;
-    });
-    return { ...list, tasks: kept };
-  });
-
-  if (toArchive.length === 0) return data;
-
-  const archiveIdx = updatedLists.findIndex((l) => l.id === ARCHIVE_LIST_ID);
-  if (archiveIdx >= 0) {
-    updatedLists[archiveIdx] = {
-      ...updatedLists[archiveIdx],
-      tasks: [...updatedLists[archiveIdx].tasks, ...toArchive],
-    };
-  } else {
-    updatedLists.push({ id: ARCHIVE_LIST_ID, title: "アーカイブ", tasks: toArchive });
-  }
-
-  return { ...data, lists: updatedLists };
-}
-
 export default function App() {
   const [authStatus, setAuthStatus] = useState<{ hasCredentials: boolean; hasTokens: boolean } | null>(null);
   const [calendarList, setCalendarList] = useState<CalendarInfo[]>([]);
@@ -100,141 +49,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState>({ open: false, mode: "create" });
   const [currentView, setCurrentView] = useState<string>("timeGridDay");
-  const [tasksData, setTasksData] = useState<TasksData>(DEFAULT_TASKS);
-  const [activeDetail, setActiveDetail] = useState<{ listId: string; taskId: string } | null>(null);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isDayView = currentView === "timeGridDay";
-
-  useEffect(() => {
-    window.api.tasksLoad().then((raw) => {
-      if (raw && (raw as TasksData).version) {
-        const archived = archiveDoneTasks(raw as TasksData);
-        setTasksData(archived);
-        if (archived !== raw) {
-          window.api.tasksSave(archived).catch(() => {});
-        }
-      }
-    }).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    function scheduleNext() {
-      const ms = msUntilMidnightJST();
-      return setTimeout(() => {
-        setTasksData((prev) => {
-          const next = archiveDoneTasks(prev);
-          if (next !== prev) window.api.tasksSave(next).catch(() => {});
-          return next;
-        });
-        timerRef.current = scheduleNext();
-      }, ms);
-    }
-    const timerRef = { current: scheduleNext() };
-    return () => clearTimeout(timerRef.current);
-  }, []);
-
-  const handleTasksChange = useCallback((data: TasksData) => {
-    setTasksData(data);
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      window.api.tasksSave(data).catch(() => {});
-    }, 800);
-  }, []);
-
-  const openDetail = useCallback((listId: string, taskId: string) => {
-    setActiveDetail({ listId, taskId });
-  }, []);
-
-  const closeDetail = useCallback(() => {
-    setActiveDetail(null);
-  }, []);
-
-  const activeTask: TaskItem | null = activeDetail
-    ? (tasksData.lists.find((l) => l.id === activeDetail.listId)?.tasks.find((t) => t.id === activeDetail.taskId) ?? null)
-    : null;
-
-  useEffect(() => {
-    if (activeDetail && !activeTask) {
-      closeDetail();
-    }
-  }, [activeDetail, activeTask, closeDetail]);
-
-  const updateActiveTask = useCallback((patch: Partial<TaskItem>) => {
-    if (!activeDetail) return;
-    const next: TasksData = {
-      ...tasksData,
-      lists: tasksData.lists.map((l) =>
-        l.id === activeDetail.listId
-          ? { ...l, tasks: l.tasks.map((t) => t.id === activeDetail.taskId ? { ...t, ...patch } : t) }
-          : l,
-      ),
-    };
-    handleTasksChange(next);
-  }, [activeDetail, tasksData, handleTasksChange]);
-
-  const deleteActiveTask = useCallback(() => {
-    if (!activeDetail) return;
-    const next: TasksData = {
-      ...tasksData,
-      lists: tasksData.lists.map((l) =>
-        l.id === activeDetail.listId
-          ? { ...l, tasks: l.tasks.filter((t) => t.id !== activeDetail.taskId && t.parent !== activeDetail.taskId) }
-          : l,
-      ),
-    };
-    handleTasksChange(next);
-  }, [activeDetail, tasksData, handleTasksChange]);
-
-  const activeChildren: TaskItem[] = activeDetail
-    ? (tasksData.lists.find((l) => l.id === activeDetail.listId)?.tasks.filter((t) => t.parent === activeDetail.taskId) ?? [])
-    : [];
-
-  const addActiveChild = useCallback(() => {
-    if (!activeDetail) return;
-    const newTask: TaskItem = { id: Math.random().toString(36).slice(2, 10), title: "", done: false, parent: activeDetail.taskId };
-    const next: TasksData = {
-      ...tasksData,
-      lists: tasksData.lists.map((l) =>
-        l.id === activeDetail.listId ? { ...l, tasks: [...l.tasks, newTask] } : l,
-      ),
-    };
-    handleTasksChange(next);
-  }, [activeDetail, tasksData, handleTasksChange]);
-
-  const updateChild = useCallback((childId: string, patch: Partial<TaskItem>) => {
-    if (!activeDetail) return;
-    const next: TasksData = {
-      ...tasksData,
-      lists: tasksData.lists.map((l) =>
-        l.id === activeDetail.listId
-          ? { ...l, tasks: l.tasks.map((t) => t.id === childId ? { ...t, ...patch } : t) }
-          : l,
-      ),
-    };
-    handleTasksChange(next);
-  }, [activeDetail, tasksData, handleTasksChange]);
-
-  const deleteChild = useCallback((childId: string) => {
-    if (!activeDetail) return;
-    const next: TasksData = {
-      ...tasksData,
-      lists: tasksData.lists.map((l) =>
-        l.id === activeDetail.listId
-          ? { ...l, tasks: l.tasks.filter((t) => t.id !== childId) }
-          : l,
-      ),
-    };
-    handleTasksChange(next);
-  }, [activeDetail, tasksData, handleTasksChange]);
-
-  useEffect(() => {
-    return () => {
-      if (saveTimerRef.current) {
-        clearTimeout(saveTimerRef.current);
-      }
-    };
-  }, []);
 
   const calendarColorMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -387,30 +203,8 @@ export default function App() {
       </div>
 
       {isDayView && (
-        <div className="cal-task-pane">
-          <TaskPanel
-            data={tasksData}
-            onChange={handleTasksChange}
-            activeDetail={activeDetail}
-            onOpenDetail={openDetail}
-          />
-        </div>
-      )}
-
-      {activeTask && (
-        <div className="task-detail-overlay" onClick={closeDetail}>
-          <div className="task-detail-overlay-panel" onClick={(e) => e.stopPropagation()}>
-            <TaskDetailPane
-              task={activeTask}
-              childTasks={activeChildren}
-              onChange={updateActiveTask}
-              onClose={closeDetail}
-              onDelete={deleteActiveTask}
-              onAddChild={addActiveChild}
-              onUpdateChild={updateChild}
-              onDeleteChild={deleteChild}
-            />
-          </div>
+        <div className="cal-memo-pane">
+          <MemoPane />
         </div>
       )}
 

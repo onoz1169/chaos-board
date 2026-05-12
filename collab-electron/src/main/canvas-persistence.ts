@@ -91,3 +91,32 @@ export async function saveState(state: CanvasState): Promise<void> {
   await writeFile(tmp, json, "utf-8");
   await rename(tmp, STATE_FILE);
 }
+
+export async function loadScratchpadContent(): Promise<string> {
+  try {
+    const raw = await readFile(STATE_FILE, "utf-8");
+    const state = JSON.parse(raw) as Record<string, unknown>;
+    const sp = state.scratchpad as { content?: string } | undefined;
+    return sp?.content ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export async function saveScratchpadContent(content: string): Promise<void> {
+  if (!existsSync(STATE_DIR)) {
+    await mkdir(STATE_DIR, { recursive: true });
+  }
+  let state: Record<string, unknown> = {};
+  if (existsSync(STATE_FILE)) {
+    try {
+      state = JSON.parse(await readFile(STATE_FILE, "utf-8"));
+    } catch { /* start fresh */ }
+  }
+  const sp = (state.scratchpad ?? {}) as Record<string, unknown>;
+  sp.content = content;
+  state.scratchpad = sp;
+  const tmp = join(tmpdir(), `canvas-state-${crypto.randomUUID()}.json`);
+  await writeFile(tmp, JSON.stringify(state, null, 2), "utf-8");
+  await rename(tmp, STATE_FILE);
+}

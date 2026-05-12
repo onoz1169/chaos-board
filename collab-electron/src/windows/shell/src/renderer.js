@@ -4311,16 +4311,14 @@ async function init() {
 		scratchpadOverlay.style.display = "";
 		scratchpadOverlay.classList.add("visible");
 
-		// If spMemo is empty, try loading from disk (may not have been restored yet)
-		if (!spMemo.content || !spMemo.drawing) {
-			try {
-				const saved = await window.shellApi.canvasLoadState();
-				if (saved?.scratchpad) {
-					if (saved.scratchpad.content) spMemo.content = saved.scratchpad.content;
-					if (saved.scratchpad.drawing) spMemo.drawing = saved.scratchpad.drawing;
-				}
-			} catch {}
-		}
+		// Always reload text content from disk to pick up edits from calendar tile
+		try {
+			const saved = await window.shellApi.canvasLoadState();
+			if (saved?.scratchpad) {
+				if (saved.scratchpad.content) spMemo.content = saved.scratchpad.content;
+				if (saved.scratchpad.drawing && !spMemo.drawing) spMemo.drawing = saved.scratchpad.drawing;
+			}
+		} catch {}
 
 		if (scratchpadEditor) {
 			scratchpadEditor.innerHTML = spMemo.content || "";
