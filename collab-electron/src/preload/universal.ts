@@ -492,6 +492,10 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.invoke("scratchpad:load-content"),
   scratchpadSave: (content: string): Promise<void> =>
     ipcRenderer.invoke("scratchpad:save-content", content),
+  memosLoad: (): Promise<unknown> =>
+    ipcRenderer.invoke("memos:load"),
+  memosSave: (data: unknown): Promise<void> =>
+    ipcRenderer.invoke("memos:save", data),
   calendarRequestExpand: (widthPx?: number) =>
     ipcRenderer.sendToHost("calendar-tile:request-expand", widthPx),
   calendarRequestRestore: () =>

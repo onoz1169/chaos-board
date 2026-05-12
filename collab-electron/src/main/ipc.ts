@@ -71,6 +71,7 @@ import {
 } from "./calendar-auth";
 import { fetchCalendarList, fetchEvents, createEvent, updateEvent } from "./calendar-api";
 import { loadTasks, saveTasks, type TasksData } from "./tasks";
+import { loadMemos, saveMemos, type MemosData } from "./memos";
 
 const FS_CHANGE_DELETED = 3;
 
@@ -1338,6 +1339,10 @@ export function registerIpcHandlers(config: AppConfig): void {
 
   ipcMain.handle("scratchpad:save-content", (_event, content: string) =>
     canvasPersistence.saveScratchpadContent(content));
+
+  ipcMain.handle("memos:load", () => loadMemos());
+
+  ipcMain.handle("memos:save", (_event, data: MemosData) => saveMemos(data));
 }
 
 async function readTreeRecursive(

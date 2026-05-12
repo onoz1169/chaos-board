@@ -452,14 +452,145 @@ html, body, #root {
 }
 
 .memo-pane-header {
-  font-size: 11px;
-  font-weight: 600;
-  color: rgba(255,255,255,0.35);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 10px 14px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px 6px 10px;
   flex-shrink: 0;
   border-bottom: 1px solid rgba(255,255,255,0.07);
+  position: relative;
+  gap: 4px;
+}
+
+.memo-pane-header-left {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+.memo-pane-header-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.memo-name-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.7);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  max-width: 100%;
+  transition: background 0.12s;
+}
+
+.memo-name-btn:hover { background: rgba(255,255,255,0.08); }
+
+.memo-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memo-name-arrow {
+  font-size: 9px;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.memo-name-input {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(74,158,255,0.5);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  padding: 2px 6px;
+  outline: none;
+  width: 100%;
+}
+
+.memo-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 160px;
+  max-width: 240px;
+  background: #1e1e2e;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.memo-dropdown-item {
+  display: flex;
+  align-items: center;
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  color: rgba(255,255,255,0.7);
+  gap: 6px;
+  transition: background 0.1s;
+}
+
+.memo-dropdown-item:hover { background: rgba(255,255,255,0.07); }
+
+.memo-dropdown-item.active {
+  background: rgba(74,158,255,0.12);
+  color: #fff;
+}
+
+.memo-dropdown-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memo-dropdown-delete {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.3);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 3px;
+  line-height: 1;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s;
+}
+
+.memo-dropdown-item:hover .memo-dropdown-delete { opacity: 1; }
+.memo-dropdown-delete:hover { color: #fca5a5; }
+
+.memo-action-btn {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.4);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-family: inherit;
+  line-height: 1;
+  transition: background 0.12s, color 0.12s;
+}
+
+.memo-action-btn:hover {
+  background: rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.8);
 }
 
 .memo-pane-editor {
