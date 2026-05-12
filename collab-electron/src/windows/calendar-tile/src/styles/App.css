@@ -397,19 +397,34 @@ html, body, #root {
   cursor: col-resize;
   flex-shrink: 0;
   background: transparent;
-  transition: background 0.15s;
   position: relative;
+}
+
+/* expand hit area to 12px without growing layout */
+.cal-split-handle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  right: -4px;
 }
 
 .cal-split-handle::after {
   content: "";
   position: absolute;
-  inset: 0 -2px;
+  top: 0;
+  bottom: 0;
+  left: 1px;
+  width: 2px;
+  background: transparent;
+  border-radius: 1px;
+  transition: background 0.15s;
 }
 
-.cal-split-handle:hover,
-.cal-split-handle:active {
-  background: rgba(74, 158, 255, 0.5);
+.cal-split-handle:hover::after,
+.cal-split-handle:active::after {
+  background: rgba(74, 158, 255, 0.6);
 }
 
 .cal-calendar-full {
@@ -504,6 +519,20 @@ html, body, #root {
   opacity: 0.5;
   flex-shrink: 0;
 }
+
+.memo-name-edit {
+  font-size: 11px;
+  opacity: 0;
+  color: rgba(255,255,255,0.5);
+  flex-shrink: 0;
+  padding: 0 2px;
+  border-radius: 3px;
+  transition: opacity 0.12s, background 0.12s;
+  cursor: text;
+}
+
+.memo-name-btn:hover .memo-name-edit { opacity: 1; }
+.memo-name-edit:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.85); }
 
 .memo-name-input {
   background: rgba(255,255,255,0.08);

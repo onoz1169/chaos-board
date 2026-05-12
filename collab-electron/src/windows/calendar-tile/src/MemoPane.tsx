@@ -23,7 +23,20 @@ export default function MemoPane() {
   const [nameValue, setNameValue] = useState("");
   const editorRef = useRef<HTMLDivElement>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingDataRef = useRef<MemosData | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
+
+  const flushSave = useCallback(() => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    if (pendingDataRef.current) {
+      const toSave = pendingDataRef.current;
+      pendingDataRef.current = null;
+      window.api.memosSave(toSave).catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     window.api.memosLoad().then((raw) => {
@@ -39,9 +52,13 @@ export default function MemoPane() {
   const activeMemo = data ? data.memos.find((m) => m.id === data.activeId) ?? data.memos[0] : null;
 
   const scheduleSave = useCallback((updated: MemosData) => {
+    pendingDataRef.current = updated;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      window.api.memosSave(updated).catch(() => {});
+      const toSave = pendingDataRef.current;
+      pendingDataRef.current = null;
+      saveTimerRef.current = null;
+      if (toSave) window.api.memosSave(toSave).catch(() => {});
     }, 600);
   }, []);
 
@@ -60,7 +77,6 @@ export default function MemoPane() {
     if (!data) return;
     const target = data.memos.find((m) => m.id === id);
     if (!target) return;
-    // flush current before switching
     const currentContent = editorRef.current?.innerHTML ?? "";
     const flushed: MemosData = {
       ...data,
@@ -70,8 +86,9 @@ export default function MemoPane() {
     setData(flushed);
     setDropdownOpen(false);
     if (editorRef.current) editorRef.current.innerHTML = target.content;
-    scheduleSave(flushed);
-  }, [data, scheduleSave]);
+    pendingDataRef.current = flushed;
+    flushSave();
+  }, [data, flushSave]);
 
   const addMemo = useCallback(() => {
     if (!data) return;
@@ -126,8 +143,18 @@ export default function MemoPane() {
   }, []);
 
   useEffect(() => {
-    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
-  }, []);
+    const onHidden = () => { if (document.visibilityState === "hidden") flushSave(); };
+    const onBlur = () => flushSave();
+    document.addEventListener("visibilitychange", onHidden);
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("beforeunload", flushSave);
+    return () => {
+      document.removeEventListener("visibilitychange", onHidden);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("beforeunload", flushSave);
+      flushSave();
+    };
+  }, [flushSave]);
 
   if (!data || !activeMemo) return <div className="memo-pane" />;
 
@@ -152,9 +179,14 @@ export default function MemoPane() {
               className="memo-name-btn"
               onClick={() => setDropdownOpen((v) => !v)}
               onDoubleClick={startRename}
-              title="クリックで切り替え / ダブルクリックでリネーム"
+              title="クリック: 切り替え / ダブルクリック: リネーム"
             >
               <span className="memo-name-text">{activeMemo.name}</span>
+              <span
+                className="memo-name-edit"
+                onClick={(e) => { e.stopPropagation(); startRename(); }}
+                title="リネーム"
+              >✎</span>
               <span className="memo-name-arrow">{dropdownOpen ? "▴" : "▾"}</span>
             </button>
           )}

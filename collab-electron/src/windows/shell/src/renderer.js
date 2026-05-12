@@ -3585,6 +3585,9 @@ async function init() {
 			const type = inferTileType(filePath);
 			createFileTile(type, cx + i * 30, cy + i * 30, filePath);
 		}
+		if (fileBrowserOverlay && !fileBrowserOverlay.classList.contains("hidden")) {
+			closeFileBrowser();
+		}
 	});
 
 	if (dragDropOverlay) {
@@ -4392,6 +4395,12 @@ async function init() {
 	if (toolFilesBtn) {
 		toolFilesBtn.addEventListener("mousedown", (e) => e.stopPropagation());
 		toolFilesBtn.addEventListener("click", toggleFileBrowser);
+	}
+
+	const toolSearchBtn = document.getElementById("tool-search-btn");
+	if (toolSearchBtn) {
+		toolSearchBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+		toolSearchBtn.addEventListener("click", () => handleShortcut("focus-search"));
 	}
 
 	if (scratchpadCloseBtn) scratchpadCloseBtn.addEventListener("click", closeScratchpad);
@@ -6819,7 +6828,13 @@ init();
 	// -- Empty canvas hint --
 
 	const emptyHint = document.getElementById("canvas-empty-hint");
-	emptyHint.innerHTML = "Right-click to create &nbsp;|&nbsp; Double-click for terminal &nbsp;|&nbsp; Drag files to import &nbsp;|&nbsp; ? for shortcuts";
+	emptyHint.innerHTML = [
+		"<b>右クリック</b> 新規タイル",
+		"<b>ダブルクリック</b> ターミナル",
+		"<b>ファイルドロップ</b> 取り込み",
+		"<b>⌘K</b> 検索",
+		"<b>?</b> ショートカット一覧",
+	].join(" &nbsp;|&nbsp; ");
 
 	function updateEmptyHint() {
 		if (tiles.length === 0) {
