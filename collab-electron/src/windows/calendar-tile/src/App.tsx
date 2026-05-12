@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -49,8 +49,36 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState>({ open: false, mode: "create" });
   const [currentView, setCurrentView] = useState<string>("timeGridDay");
+  const [calPaneWidth, setCalPaneWidth] = useState<number>(30);
+  const splitRef = useRef<HTMLDivElement>(null);
 
   const isDayView = currentView === "timeGridDay";
+
+  const handleSplitDrag = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const container = splitRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const startX = e.clientX;
+    const startPct = calPaneWidth;
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    function onMove(mv: MouseEvent) {
+      const delta = mv.clientX - startX;
+      const newPct = Math.min(80, Math.max(15, startPct + (delta / rect.width) * 100));
+      setCalPaneWidth(newPct);
+    }
+    function onUp() {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [calPaneWidth]);
 
   const calendarColorMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -169,11 +197,14 @@ export default function App() {
   }
 
   return (
-    <div className={`cal-root${isDayView ? " cal-root-split" : ""}`}>
+    <div className={`cal-root${isDayView ? " cal-root-split" : ""}`} ref={splitRef}>
       {loading && <div className="cal-banner">読み込み中...</div>}
       {error && <div className="cal-banner cal-banner-error">{error}</div>}
 
-      <div className={isDayView ? "cal-calendar-pane" : "cal-calendar-full"}>
+      <div
+        className={isDayView ? "cal-calendar-pane" : "cal-calendar-full"}
+        style={isDayView ? { width: `${calPaneWidth}%` } : undefined}
+      >
         <FullCalendar
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
           initialView="timeGridDay"
@@ -203,9 +234,12 @@ export default function App() {
       </div>
 
       {isDayView && (
-        <div className="cal-memo-pane">
-          <MemoPane />
-        </div>
+        <>
+          <div className="cal-split-handle" onMouseDown={handleSplitDrag} />
+          <div className="cal-memo-pane">
+            <MemoPane />
+          </div>
+        </>
       )}
 
       {modal.open && (

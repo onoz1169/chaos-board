@@ -383,13 +383,33 @@ html, body, #root {
 }
 
 .cal-calendar-pane {
-  width: 30%;
   min-width: 0;
   height: 100%;
   display: flex;
   flex-direction: column;
   padding: 8px 4px 8px 8px;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.cal-split-handle {
+  width: 4px;
+  height: 100%;
+  cursor: col-resize;
+  flex-shrink: 0;
+  background: transparent;
+  transition: background 0.15s;
+  position: relative;
+}
+
+.cal-split-handle::after {
+  content: "";
+  position: absolute;
+  inset: 0 -2px;
+}
+
+.cal-split-handle:hover,
+.cal-split-handle:active {
+  background: rgba(74, 158, 255, 0.5);
 }
 
 .cal-calendar-full {
