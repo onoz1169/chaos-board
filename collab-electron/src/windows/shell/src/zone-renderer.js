@@ -12,7 +12,7 @@
 
 export const ZONE_W = 4200;
 export const ZONE_GAP = 1000;
-export const ZONE_H = 4000;
+export const ZONE_H = 16000;
 export const W1H_ROW_H = 400; // height of each 5W1H row
 export const W1H_STRIP_H = W1H_ROW_H * 6; // 6 rows stacked vertically
 export const TOTAL_ZONE_H = ZONE_H + W1H_STRIP_H;
@@ -26,6 +26,17 @@ const COL4 = COL3 + ZONE_W + ZONE_GAP;
 const ROW = 40;
 
 export const W1H_LABELS = ["WHY", "WHAT", "WHO", "WHERE", "WHEN", "HOW"];
+
+export const ZONE_COLOR_PALETTE = [
+	{ color: "rgba(80,140,255,0.12)",  borderColor: "rgba(80,140,255,0.9)"  },
+	{ color: "rgba(220,80,80,0.12)",   borderColor: "rgba(220,80,80,0.9)"   },
+	{ color: "rgba(60,180,100,0.12)",  borderColor: "rgba(60,180,100,0.9)"  },
+	{ color: "rgba(200,180,120,0.12)", borderColor: "rgba(200,180,120,0.9)" },
+	{ color: "rgba(160,120,200,0.12)", borderColor: "rgba(160,120,200,0.9)" },
+	{ color: "rgba(80,200,220,0.12)",  borderColor: "rgba(80,200,220,0.9)"  },
+	{ color: "rgba(220,140,60,0.12)",  borderColor: "rgba(220,140,60,0.9)"  },
+	{ color: "rgba(200,80,160,0.12)",  borderColor: "rgba(200,80,160,0.9)"  },
+];
 
 export const ZONES = [
 	{
@@ -389,4 +400,171 @@ export function getZoneCenter(zoneId) {
 		x: zone.x + zone.width / 2,
 		y: zone.y + zone.height / 2,
 	};
+}
+
+/** @type {Set<string>} — 削除されたゾーンIDを永続化のために保持 */
+const deletedZoneIds = new Set();
+
+/**
+ * ゾーンを削除する。DOMとZONES配列から取り除く。
+ * @param {string} zoneId
+ */
+export function removeZone(zoneId) {
+	const idx = ZONES.findIndex(z => z.id === zoneId);
+	if (idx !== -1) ZONES.splice(idx, 1);
+	deletedZoneIds.add(zoneId);
+	delete customLabels[zoneId];
+	const el = zoneDOMs.get(zoneId);
+	if (el) { el.remove(); zoneDOMs.delete(zoneId); }
+	summaryDOMs.delete(zoneId);
+	labelDOMs.delete(zoneId);
+}
+
+/**
+ * 削除済みゾーンIDの一覧を返す（保存用）。
+ * @returns {string[]}
+ */
+export function getDeletedZoneIds() {
+	return [...deletedZoneIds];
+}
+
+/**
+ * 保存済みの削除済みゾーンIDをロードして適用する。
+ * @param {string[]} ids
+ */
+export function loadDeletedZones(ids) {
+	for (const id of ids) removeZone(id);
+}
+
+/** @type {Array<object>} — ユーザーが作成したカスタムゾーン */
+const customZones = [];
+
+/**
+ * ゾーンを動的に追加する。DOMが初期化済みの場合は即時DOM要素も生成する。
+ * @param {{ id: string, label: string, color: string, borderColor: string, x: number, y: number, width: number, height: number }} zoneConfig
+ * @returns {object} 追加されたゾーン
+ */
+export function addZone(zoneConfig) {
+	const zone = { ...zoneConfig };
+	ZONES.push(zone);
+	customZones.push(zone);
+	if (customLabels[zone.id] === undefined && zone.label !== zone.id) {
+		// カスタムラベルとして保持（デフォルトなし）
+		customLabels[zone.id] = zone.label;
+	}
+
+	// DOM が初期化済みなら要素を生成する
+	if (layerEl) {
+		const el = document.createElement("div");
+		el.className = "canvas-zone";
+		el.id = zone.id;
+		el.dataset.zoneId = zone.id;
+		el.style.background = zone.color;
+		el.style.borderColor = zone.borderColor;
+
+		const label = document.createElement("div");
+		label.className = "canvas-zone-label";
+		label.textContent = zone.label;
+		label.style.color = zone.borderColor;
+		label.title = "ダブルクリックでラベルを編集";
+		el.appendChild(label);
+		labelDOMs.set(zone.id, label);
+
+		label.addEventListener("dblclick", (e) => {
+			e.stopPropagation();
+			const prevText = label.textContent;
+			label.contentEditable = "true";
+			label.style.cursor = "text";
+			label.style.outline = "2px solid " + zone.borderColor;
+			label.style.borderRadius = "2px";
+			label.focus();
+			const range = document.createRange();
+			range.selectNodeContents(label);
+			const sel = window.getSelection();
+			sel.removeAllRanges();
+			sel.addRange(range);
+
+			function commit() {
+				const newText = label.textContent.trim();
+				label.contentEditable = "false";
+				label.style.cursor = "";
+				label.style.outline = "";
+				label.style.borderRadius = "";
+				setZoneLabel(zone.id, newText || prevText);
+				el.dispatchEvent(new CustomEvent("zone-label-change", { bubbles: true }));
+			}
+
+			label.addEventListener("keydown", (ev) => {
+				if (ev.key === "Enter") { ev.preventDefault(); label.blur(); }
+				else if (ev.key === "Escape") {
+					label.contentEditable = "false";
+					label.style.cursor = "";
+					label.style.outline = "";
+					label.style.borderRadius = "";
+					label.textContent = prevText;
+				}
+			}, { once: true });
+			label.addEventListener("blur", () => {
+				if (label.contentEditable === "true") commit();
+			}, { once: true });
+		});
+
+		const areaLabel = document.createElement("div");
+		areaLabel.className = "canvas-zone-area-label";
+		areaLabel.textContent = "WORKSPACE";
+		areaLabel.style.color = zone.borderColor;
+		el.appendChild(areaLabel);
+
+		const summary = document.createElement("div");
+		summary.className = "canvas-zone-summary";
+		summary.style.color = zone.borderColor;
+		summary.textContent = "Empty";
+		el.appendChild(summary);
+		summaryDOMs.set(zone.id, summary);
+
+		const strip = document.createElement("div");
+		strip.className = "zone-5w1h-strip";
+		strip.style.borderTopColor = zone.borderColor;
+		for (const q of W1H_LABELS) {
+			const row = document.createElement("div");
+			row.className = "zone-5w1h-row";
+			row.style.borderColor = zone.borderColor;
+			const rowLabel = document.createElement("div");
+			rowLabel.className = "zone-5w1h-label";
+			rowLabel.textContent = q;
+			rowLabel.style.color = zone.borderColor;
+			row.appendChild(rowLabel);
+			strip.appendChild(row);
+		}
+		el.appendChild(strip);
+
+		layerEl.appendChild(el);
+		zoneDOMs.set(zone.id, el);
+	}
+
+	return zone;
+}
+
+/**
+ * カスタムゾーン（ユーザー作成）を保存用に返す。
+ * @returns {Array<{ id: string, label: string, color: string, borderColor: string, x: number, y: number, width: number, height: number }>}
+ */
+export function getCustomZones() {
+	return customZones.filter(z => ZONES.includes(z)).map(z => ({
+		id: z.id, label: getZoneLabel(z.id),
+		color: z.color, borderColor: z.borderColor,
+		x: z.x, y: z.y, width: z.width, height: z.height,
+	}));
+}
+
+/**
+ * 保存済みのカスタムゾーンをロードして追加する（initZoneLayer後に呼ぶ）。
+ * @param {Array<object>} zones
+ */
+export function loadCustomZones(zones) {
+	for (const z of zones) {
+		if (!ZONES.find(existing => existing.id === z.id)) {
+			addZone(z);
+		}
+	}
 }

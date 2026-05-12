@@ -64,6 +64,13 @@ import {
   type FolderTableFile,
   type TreeNode,
 } from "@collab/shared/types";
+import {
+  getStoredCredentials,
+  getStoredTokens,
+  startOAuthFlow,
+} from "./calendar-auth";
+import { fetchCalendarList, fetchEvents, createEvent, updateEvent } from "./calendar-api";
+import { loadTasks, saveTasks, type TasksData } from "./tasks";
 
 const FS_CHANGE_DELETED = 3;
 
@@ -1147,6 +1154,12 @@ export function registerIpcHandlers(config: AppConfig): void {
   );
 
   registerMethod(
+    "agent.getActiveSessions",
+    () => ({ sessions: agentActivity.getActiveSessions() }),
+    { description: "Get all currently active agent sessions" },
+  );
+
+  registerMethod(
     "app.notify",
     (params) => {
       const p = params as { title?: string; body: string };
@@ -1264,6 +1277,10 @@ export function registerIpcHandlers(config: AppConfig): void {
   });
 
   // Canvas persistence
+  ipcMain.handle("agent:get-active-sessions", async () => {
+    return { sessions: agentActivity.getActiveSessions() };
+  });
+
   ipcMain.handle("canvas:load-state", async () => {
     return canvasPersistence.loadState();
   });
@@ -1271,6 +1288,51 @@ export function registerIpcHandlers(config: AppConfig): void {
   ipcMain.handle("canvas:save-state", async (_event, state) => {
     return canvasPersistence.saveState(state);
   });
+
+  ipcMain.handle("calendar:get-auth-status", () => {
+    const creds = getStoredCredentials(appConfig);
+    const tokens = getStoredTokens(appConfig);
+    return { hasCredentials: !!creds, hasTokens: !!tokens };
+  });
+
+  ipcMain.handle("calendar:save-credentials", (_event, clientId: string, clientSecret: string) => {
+    appConfig.ui["google_calendar_client_id"] = clientId;
+    appConfig.ui["google_calendar_client_secret"] = clientSecret;
+    saveConfig(appConfig);
+  });
+
+  ipcMain.handle("calendar:connect", async () => {
+    const creds = getStoredCredentials(appConfig);
+    if (!creds) throw new Error("No credentials saved");
+    const tokens = await startOAuthFlow(creds.clientId, creds.clientSecret);
+    appConfig.ui["google_calendar_tokens"] = tokens;
+    saveConfig(appConfig);
+  });
+
+  ipcMain.handle("calendar:disconnect", () => {
+    delete appConfig.ui["google_calendar_tokens"];
+    saveConfig(appConfig);
+  });
+
+  ipcMain.handle("calendar:fetch-calendar-list", async () => {
+    return fetchCalendarList(appConfig);
+  });
+
+  ipcMain.handle("calendar:fetch-events", async (_event, timeMin: string, timeMax: string, calendarIds?: string[]) => {
+    return fetchEvents(appConfig, timeMin, timeMax, calendarIds);
+  });
+
+  ipcMain.handle("calendar:create-event", async (_event, input) => {
+    return createEvent(appConfig, input);
+  });
+
+  ipcMain.handle("calendar:update-event", async (_event, eventId: string, input) => {
+    return updateEvent(appConfig, eventId, input);
+  });
+
+  ipcMain.handle("tasks:load", () => loadTasks());
+
+  ipcMain.handle("tasks:save", (_event, data: TasksData) => saveTasks(data));
 }
 
 async function readTreeRecursive(

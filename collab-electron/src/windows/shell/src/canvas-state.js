@@ -34,6 +34,7 @@ const DEFAULT_TILE_SIZES = {
 	image: { width: 280, height: 280 },
 	graph: { width: 600, height: 500 },
 	browser: { width: 480, height: 640 },
+	calendar: { width: 640, height: 520 },
 	text: { width: 200, height: 200 },
 	shape: { width: 160, height: 160 },
 };

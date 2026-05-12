@@ -470,6 +470,32 @@ contextBridge.exposeInMainWorld("api", {
   // Canvas pinch forwarding
   forwardPinch: (deltaY: number) =>
     ipcRenderer.send("canvas:forward-pinch", deltaY),
+
+  // Calendar tile
+  calendarGetAuthStatus: (): Promise<{ hasCredentials: boolean; hasTokens: boolean }> =>
+    ipcRenderer.invoke("calendar:get-auth-status"),
+  calendarSaveCredentials: (clientId: string, clientSecret: string): Promise<void> =>
+    ipcRenderer.invoke("calendar:save-credentials", clientId, clientSecret),
+  calendarConnect: (): Promise<void> =>
+    ipcRenderer.invoke("calendar:connect"),
+  calendarDisconnect: (): Promise<void> =>
+    ipcRenderer.invoke("calendar:disconnect"),
+  calendarFetchCalendarList: (): Promise<unknown[]> =>
+    ipcRenderer.invoke("calendar:fetch-calendar-list"),
+  calendarFetchEvents: (timeMin: string, timeMax: string, calendarIds?: string[]): Promise<unknown[]> =>
+    ipcRenderer.invoke("calendar:fetch-events", timeMin, timeMax, calendarIds),
+  calendarCreateEvent: (input: unknown): Promise<unknown> =>
+    ipcRenderer.invoke("calendar:create-event", input),
+  calendarUpdateEvent: (eventId: string, input: unknown): Promise<unknown> =>
+    ipcRenderer.invoke("calendar:update-event", eventId, input),
+  tasksLoad: (): Promise<unknown> =>
+    ipcRenderer.invoke("tasks:load"),
+  tasksSave: (data: unknown): Promise<void> =>
+    ipcRenderer.invoke("tasks:save", data),
+  calendarRequestExpand: (widthPx?: number) =>
+    ipcRenderer.sendToHost("calendar-tile:request-expand", widthPx),
+  calendarRequestRestore: () =>
+    ipcRenderer.sendToHost("calendar-tile:request-restore"),
 });
 
 // Forward ctrl+wheel (trackpad pinch) from tile webviews to the canvas

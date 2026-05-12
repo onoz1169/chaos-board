@@ -537,6 +537,7 @@ export function getTileLabel(tile) {
     if (tile.folderPath) return splitFilepath(tile.folderPath);
     return { parent: "", name: "Graph" };
   }
+  if (tile.type === "calendar") return { parent: "", name: "Calendar" };
   if (tile.filePath) return splitFilepath(tile.filePath);
   return { parent: "", name: tile.type };
 }

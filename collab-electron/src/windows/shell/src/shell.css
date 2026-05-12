@@ -175,6 +175,13 @@ body {
 
 /* ── Object List Panel ── */
 
+#nav-calendar {
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+	border-top: 1px solid var(--border);
+}
+
 #tile-list-panel {
 	flex-shrink: 0;
 	border-bottom: 1px solid var(--border);
@@ -196,6 +203,27 @@ body {
 	border-bottom: 1px solid var(--border);
 	flex-shrink: 0;
 }
+
+#tile-list-search-wrap {
+	padding: 5px 8px;
+	border-bottom: 1px solid var(--border);
+	flex-shrink: 0;
+}
+
+#tile-list-search {
+	width: 100%;
+	box-sizing: border-box;
+	background: rgba(255,255,255,0.07);
+	border: 1px solid rgba(255,255,255,0.12);
+	border-radius: 4px;
+	padding: 4px 8px;
+	font-size: 11px;
+	color: var(--fg, #ddd);
+	outline: none;
+}
+
+#tile-list-search::placeholder { color: var(--muted, #666); }
+#tile-list-search:focus { border-color: rgba(255,255,255,0.3); }
 
 #tile-list-body {
 	overflow-y: auto;
@@ -244,6 +272,33 @@ body {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+
+/* ── Active Terminals Section ── */
+
+.tile-list-active-section {
+	border-bottom: 1px solid rgba(255,200,50,0.2);
+	margin-bottom: 6px;
+	padding-bottom: 4px;
+}
+
+.tile-list-active-header {
+	padding: 5px 12px 3px;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.07em;
+	color: rgba(255,200,50,0.85);
+	font-family: var(--font-mono);
+}
+
+.tile-list-active-item .tile-list-type {
+	color: rgba(80,220,100,0.9);
+	opacity: 1;
+	font-size: 9px;
+}
+
+.tile-list-active-item {
+	color: var(--fg);
 }
 
 /* ── Tile List Zone Group Headers ── */
@@ -400,6 +455,69 @@ body {
 	background: rgba(255,255,255,0.13);
 }
 
+.zone-layout-add-btn {
+	background: rgba(80,200,100,0.1);
+	border-color: rgba(80,200,100,0.3);
+	color: rgba(80,220,100,0.9);
+	margin-top: 0;
+}
+
+.zone-layout-add-btn:hover {
+	background: rgba(80,200,100,0.2);
+	border-color: rgba(80,200,100,0.5);
+}
+
+.zone-layout-add-wrap {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	margin: 0 8px 8px;
+}
+
+.zone-layout-add-input {
+	flex: 1;
+	padding: 4px 8px;
+	font-size: 11px;
+	background: rgba(255,255,255,0.08);
+	border: 1px solid rgba(80,200,100,0.4);
+	border-radius: 4px;
+	color: #eee;
+	outline: none;
+	font-family: var(--font-mono);
+}
+
+.zone-layout-add-input:focus {
+	border-color: rgba(80,200,100,0.8);
+}
+
+.zone-layout-add-confirm {
+	padding: 4px 8px;
+	font-size: 11px;
+	background: rgba(80,200,100,0.2);
+	border: 1px solid rgba(80,200,100,0.4);
+	border-radius: 4px;
+	color: rgba(80,220,100,0.9);
+	cursor: pointer;
+}
+
+.zone-layout-add-confirm:hover {
+	background: rgba(80,200,100,0.35);
+}
+
+.zone-layout-add-cancel {
+	padding: 4px 6px;
+	font-size: 11px;
+	background: transparent;
+	border: 1px solid rgba(255,255,255,0.15);
+	border-radius: 4px;
+	color: #666;
+	cursor: pointer;
+}
+
+.zone-layout-add-cancel:hover {
+	color: #aaa;
+}
+
 /* 旧カードスタイル（未使用だが念のため残す） */
 .zone-layout-card {
 	display: none;
@@ -416,6 +534,29 @@ body {
 	text-align: center;
 	outline: none;
 	font-family: var(--font-mono);
+}
+
+.zone-layout-card-del-btn {
+	position: absolute;
+	top: 4px;
+	right: 4px;
+	width: 18px;
+	height: 18px;
+	line-height: 18px;
+	text-align: center;
+	font-size: 12px;
+	font-weight: 700;
+	color: rgba(255,255,255,0.7);
+	background: rgba(0,0,0,0.45);
+	border-radius: 50%;
+	cursor: pointer;
+	pointer-events: auto;
+	z-index: 10;
+	transition: background 0.15s, color 0.15s;
+}
+.zone-layout-card-del-btn:hover {
+	background: rgba(220,60,60,0.85);
+	color: #fff;
 }
 
 /* ── Zone Layout フローティングオーバーレイ ── */
@@ -3616,4 +3757,87 @@ body {
 #scratchpad-footer-actions button:hover {
 	background: rgba(255, 255, 255, 0.12);
 	color: var(--fg);
+}
+
+/* File browser floating overlay */
+#file-browser-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 14000;
+	display: flex;
+	align-items: stretch;
+	justify-content: flex-start;
+	pointer-events: none;
+}
+
+#file-browser-overlay.hidden {
+	display: none;
+}
+
+#file-browser-backdrop {
+	position: absolute;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.35);
+	pointer-events: all;
+}
+
+#file-browser-panel {
+	position: relative;
+	width: 300px;
+	height: 100%;
+	background: var(--bg);
+	border-right: 1px solid var(--border);
+	display: flex;
+	flex-direction: column;
+	pointer-events: all;
+	animation: fileBrowserSlideIn 0.18s ease;
+}
+
+@keyframes fileBrowserSlideIn {
+	from { transform: translateX(-100%); opacity: 0; }
+	to { transform: translateX(0); opacity: 1; }
+}
+
+#file-browser-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0 12px;
+	height: 38px;
+	flex-shrink: 0;
+	border-bottom: 1px solid var(--border);
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.05em;
+	color: var(--muted);
+	text-transform: uppercase;
+}
+
+#file-browser-close {
+	background: none;
+	border: none;
+	color: var(--muted);
+	cursor: pointer;
+	font-size: 16px;
+	padding: 2px 4px;
+	border-radius: 3px;
+}
+
+#file-browser-close:hover { color: var(--fg); background: rgba(255,255,255,0.08); }
+
+#file-browser-body {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+#file-browser-body .nav-container {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+}
+
+#file-browser-body .nav-container webview {
+	flex: 1;
 }

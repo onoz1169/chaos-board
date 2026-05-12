@@ -515,6 +515,7 @@ ipcMain.handle("shell:get-view-config", () => {
     terminal: { src: getRendererURL("terminal"), preload },
     terminalTile: { src: getRendererURL("terminal-tile"), preload },
     graphTile: { src: getRendererURL("graph-tile"), preload },
+    calendarTile: { src: getRendererURL("calendar-tile"), preload },
     settings: { src: getRendererURL("settings"), preload },
   };
 });

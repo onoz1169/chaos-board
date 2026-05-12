@@ -15,7 +15,7 @@ export default defineConfig({
     build: {
       outDir: resolve(__dirname, outDir, "main"),
       rollupOptions: {
-        external: ["node-pty", "@parcel/watcher", "typescript", "sharp"],
+        external: ["node-pty", "@parcel/watcher", "typescript", "sharp", "googleapis", "google-auth-library"],
         input: {
           index: resolve(__dirname, "src/main/index.ts"),
           "watcher-worker": resolve(
@@ -78,6 +78,10 @@ export default defineConfig({
           "graph-tile": resolve(
             __dirname,
             "src/windows/graph-tile/index.html",
+          ),
+          "calendar-tile": resolve(
+            __dirname,
+            "src/windows/calendar-tile/index.html",
           ),
         },
       },

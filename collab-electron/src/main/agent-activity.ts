@@ -15,7 +15,7 @@ export interface AgentSession {
 }
 
 type AgentEvent =
-  | { kind: "session-started"; sessionId: string }
+  | { kind: "session-started"; sessionId: string; ptySessionId: string | null }
   | {
       kind: "file-touched";
       sessionId: string;
@@ -23,7 +23,7 @@ type AgentEvent =
       touchType: "read" | "write";
       timestamp: number;
     }
-  | { kind: "session-ended"; sessionId: string };
+  | { kind: "session-ended"; sessionId: string; ptySessionId: string | null };
 
 type NotifyFn = (event: AgentEvent) => void;
 
@@ -42,6 +42,7 @@ export function setWorkspacePath(path: string): void {
 export function sessionStart(params: {
   session_id: string;
   cwd: string;
+  pty_session_id?: string;
 }): void {
   if (sessions.has(params.session_id)) return;
   const session: AgentSession = {
@@ -49,10 +50,10 @@ export function sessionStart(params: {
     cwd: params.cwd,
     startedAt: Date.now(),
     interactions: [],
-    ptySessionId: null,
+    ptySessionId: params.pty_session_id ?? null,
   };
   sessions.set(params.session_id, session);
-  notifyFn?.({ kind: "session-started", sessionId: params.session_id });
+  notifyFn?.({ kind: "session-started", sessionId: params.session_id, ptySessionId: params.pty_session_id ?? null });
 }
 
 export function fileTouched(params: {
@@ -93,9 +94,11 @@ export function fileTouched(params: {
 }
 
 export function sessionEnd(params: { session_id: string }): void {
-  if (!sessions.has(params.session_id)) return;
+  const session = sessions.get(params.session_id);
+  if (!session) return;
+  const ptySessionId = session.ptySessionId;
   sessions.delete(params.session_id);
-  notifyFn?.({ kind: "session-ended", sessionId: params.session_id });
+  notifyFn?.({ kind: "session-ended", sessionId: params.session_id, ptySessionId });
 }
 
 export function getSession(
@@ -118,4 +121,8 @@ export function getPtySessionId(
   sessionId: string,
 ): string | null {
   return sessions.get(sessionId)?.ptySessionId ?? null;
+}
+
+export function getActiveSessions(): Array<{ sessionId: string; ptySessionId: string | null }> {
+  return [...sessions.values()].map(s => ({ sessionId: s.sessionId, ptySessionId: s.ptySessionId }));
 }

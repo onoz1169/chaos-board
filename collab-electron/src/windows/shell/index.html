@@ -18,7 +18,7 @@
 		<div id="panel-nav">
 			<div id="nav-toolbar">
 				<button type="button" id="update-pill" style="display: none;"></button>
-				<div id="workspace-dropdown-row">
+				<div id="workspace-dropdown-row" style="display:none">
 					<div id="workspace-dropdown">
 						<button type="button" id="workspace-trigger">
 							<span id="workspace-trigger-label"><span id="workspace-trigger-parent"></span><span
@@ -37,10 +37,7 @@
 					</div>
 				</div>
 			</div>
-			<div id="tile-list-panel">
-				<div id="tile-list-header">Objects</div>
-				<div id="tile-list-body"></div>
-			</div>
+			<div id="nav-calendar"></div>
 			<!-- #zone-layout-panel はフローティング版に移行のためコメントアウト
 			<div id="zone-layout-panel">
 				<div id="zone-layout-header">
@@ -129,6 +126,9 @@
 		<button type="button" class="pen-dock-icon dock-launch-icon" id="launch-all-btn" data-tooltip="Launch All (Cmd+Shift+L)">
 			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
 		</button>
+		<button type="button" class="pen-dock-icon" id="tool-files-btn" data-tooltip="Files (F)">
+			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+		</button>
 		<button type="button" class="pen-dock-icon dock-scratchpad-icon" id="tool-scratchpad-btn" data-tooltip="Memo (M)">
 			<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
 		</button>
@@ -174,6 +174,18 @@
 			<button type="button" id="zone-layout-float-close">&#x2715;</button>
 		</div>
 		<div id="zone-layout-float-body"></div>
+	</div>
+
+	<!-- File browser floating overlay -->
+	<div id="file-browser-overlay" class="hidden">
+		<div id="file-browser-backdrop"></div>
+		<div id="file-browser-panel">
+			<div id="file-browser-header">
+				<span>Files</span>
+				<button type="button" id="file-browser-close">&times;</button>
+			</div>
+			<div id="file-browser-body"></div>
+		</div>
 	</div>
 
 	<div id="resize-overlay"></div>

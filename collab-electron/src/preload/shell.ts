@@ -11,6 +11,7 @@ interface AllViewConfigs {
   terminal: ViewConfig;
   terminalTile: ViewConfig;
   graphTile: ViewConfig;
+  calendarTile: ViewConfig;
   settings: ViewConfig;
 }
 
@@ -141,6 +142,9 @@ contextBridge.exposeInMainWorld("shellApi", {
     ipcRenderer.on("update:status", handler);
     return () => ipcRenderer.removeListener("update:status", handler);
   },
+
+  agentGetActiveSessions: (): Promise<{ sessions: Array<{ sessionId: string; ptySessionId: string | null }> }> =>
+    ipcRenderer.invoke("agent:get-active-sessions"),
 
   canvasLoadState: () => ipcRenderer.invoke("canvas:load-state"),
   canvasSaveState: (state: unknown) =>

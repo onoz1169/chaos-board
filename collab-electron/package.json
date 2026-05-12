@@ -79,6 +79,13 @@
 		}
 	},
 	"dependencies": {
+		"@fullcalendar/core": "^6.1.20",
+		"@fullcalendar/daygrid": "^6.1.20",
+		"@fullcalendar/interaction": "^6.1.20",
+		"@fullcalendar/react": "^6.1.20",
+		"@fullcalendar/timegrid": "^6.1.20",
+		"@holiday-jp/holiday_jp": "^2.5.1",
+		"googleapis": "^171.4.0",
 		"@blocknote/core": "0.47.0",
 		"@blocknote/mantine": "0.47.0",
 		"@blocknote/react": "0.47.0",

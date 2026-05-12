@@ -16,7 +16,7 @@ import {
 	fromJSON as groupsFromJSON,
 } from "./group-state.js";
 import { initGroupLayer, renderGroups } from "./group-renderer.js";
-import { initZoneLayer, repositionZones, getTilesInZone, getZoneAtPoint, flashZone, getZones, getZoneCenter, updateZoneSummaries, ZONE_H, W1H_ROW_H, TOTAL_ZONE_H, W1H_LABELS, getZoneLabels, loadZoneLabels, getZoneLabel, setZoneLabel, ZONES, setZonePosition, getZonePositions, loadZonePositions } from "./zone-renderer.js";
+import { initZoneLayer, repositionZones, getTilesInZone, getZoneAtPoint, flashZone, getZones, getZoneCenter, updateZoneSummaries, ZONE_H, W1H_ROW_H, TOTAL_ZONE_H, W1H_LABELS, getZoneLabels, loadZoneLabels, getZoneLabel, setZoneLabel, ZONES, setZonePosition, getZonePositions, loadZonePositions, removeZone, getDeletedZoneIds, loadDeletedZones, addZone, getCustomZones, loadCustomZones, ZONE_COLOR_PALETTE, ZONE_W, TOTAL_ZONE_H as ZONE_TOTAL_H, ZONE_GAP } from "./zone-renderer.js";
 import { strokes as penStrokes, clearStrokes as clearPenStrokes, undoStroke, toJSON as penStrokesToJSON, fromJSON as penStrokesFromJSON } from "./pen-stroke-state.js";
 import { initPenOverlay, redraw as redrawPenOverlay, togglePenMode, isPenMode, setPenMode, setPenTool } from "./pen-overlay.js";
 import { connections, addConnection, removeConnection, getConnectionsForTile, toJSON as connectionsToJSON, fromJSON as connectionsFromJSON } from "./connection-state.js";
@@ -528,13 +528,10 @@ async function init() {
 		mode: "free", // "free" | "zone"
 	};
 
-	const ZONE_COLUMNS = [
-		{ id: "zone-intelligence", title: "INTELLIGENCE", color: "rgba(80,140,255,0.9)" },
-		{ id: "zone-hunt", title: "HUNT", color: "rgba(220,80,80,0.9)" },
-		{ id: "zone-blacksmith", title: "BLACKSMITH", color: "rgba(60,180,100,0.9)" },
-		{ id: "zone-rest", title: "REST", color: "rgba(200,180,120,0.9)" },
-		{ id: "zone-reflect", title: "REFLECT", color: "rgba(160,120,200,0.9)" },
-	];
+	// ZONE_COLUMNS は ZONES から動的に生成する（ゾーンの追加・削除・名前変更に追従）
+	function getZoneColumns() {
+		return getZones().map(z => ({ id: z.id, title: getZoneLabel(z.id), color: z.borderColor }));
+	}
 
 	// DOM elements
 	const panelNav = document.getElementById("panel-nav");
@@ -559,6 +556,11 @@ async function init() {
 		document.getElementById("settings-backdrop");
 	const settingsModal = document.getElementById("settings-modal");
 	const updatePill = document.getElementById("update-pill");
+	const fileBrowserOverlay = document.getElementById("file-browser-overlay");
+	const fileBrowserBody = document.getElementById("file-browser-body");
+	const fileBrowserClose = document.getElementById("file-browser-close");
+	const fileBrowserBackdrop = document.getElementById("file-browser-backdrop");
+	const toolFilesBtn = document.getElementById("tool-files-btn");
 	const dragDropOverlay =
 		document.getElementById("drag-drop-overlay");
 	const loadingOverlay =
@@ -573,7 +575,16 @@ async function init() {
 	{
 		const zoneLayer = document.getElementById("zone-layer");
 		if (zoneLayer) {
-			zoneLayer.addEventListener("zone-label-change", () => saveCanvasDebounced());
+			zoneLayer.addEventListener("zone-label-change", () => {
+				// カンバンのゾーン列タイトルを同期
+				if (kanbanState.zoneColumns) {
+					for (const col of kanbanState.zoneColumns) {
+						col.title = getZoneLabel(col.id);
+					}
+					renderKanban();
+				}
+				saveCanvasDebounced();
+			});
 			// Zone Layout Panel からのジャンプリクエストを処理する
 			zoneLayer.addEventListener("zone-layout-jump", (e) => {
 				const zoneId = e.detail && e.detail.zoneId;
@@ -790,6 +801,8 @@ async function init() {
 			kanban: getKanbanStateForSave(),
 			zoneLabels: getZoneLabels(),
 			zonePositions: getZonePositions(),
+			deletedZones: getDeletedZoneIds(),
+			customZones: getCustomZones(),
 		};
 	}
 
@@ -1008,6 +1021,7 @@ async function init() {
 			if (event.channel === "pty-session-id") {
 				tile.ptySessionId = event.args[0];
 				saveCanvasDebounced();
+				buildTileList();
 			}
 			if (event.channel === "pty-exited") {
 				const exitCode = event.args[1];
@@ -1025,6 +1039,7 @@ async function init() {
 				}
 				// Update linked kanban card status
 				updateKanbanCardStatus(tile.id, exitCode === 0 || exitCode === undefined ? "done" : "error");
+				buildTileList();
 			}
 		});
 	}
@@ -1059,6 +1074,47 @@ async function init() {
 		const wsPath = workspaces[activeIndex]?.path ?? "";
 		const tile = createCanvasTile("graph", cx, cy, { folderPath, workspacePath: wsPath });
 		spawnGraphWebview(tile);
+		saveCanvasImmediate();
+		return tile;
+	}
+
+	function spawnCalendarWebview(tile) {
+		const dom = tileDOMs.get(tile.id);
+		if (!dom) return;
+
+		const wv = document.createElement("webview");
+		const calConfig = configs.calendarTile;
+		wv.setAttribute("src", calConfig.src);
+		wv.setAttribute("preload", calConfig.preload);
+		wv.setAttribute("webpreferences", "contextIsolation=yes, sandbox=yes");
+		wv.style.width = "100%";
+		wv.style.height = "100%";
+		wv.style.border = "none";
+
+		dom.contentArea.appendChild(wv);
+		dom.webview = wv;
+
+		wv.addEventListener("ipc-message", (event) => {
+			if (event.channel === "calendar-tile:request-expand") {
+				const extraW = (event.args[0] ?? 360);
+				const currentW = tile.width ?? 400;
+				tile.width = currentW + extraW;
+				const container = dom.container;
+				container.style.width = tile.width + "px";
+				saveCanvasDebounced();
+			} else if (event.channel === "calendar-tile:request-restore") {
+				tile.width = tile._origWidth ?? 400;
+				const container = dom.container;
+				container.style.width = tile.width + "px";
+				saveCanvasDebounced();
+			}
+		});
+	}
+
+	function createCalendarTile(cx, cy) {
+		const tile = createCanvasTile("calendar", cx, cy, { width: 640, height: 480 });
+		tile._origWidth = tile.width;
+		spawnCalendarWebview(tile);
 		saveCanvasImmediate();
 		return tile;
 	}
@@ -2169,6 +2225,7 @@ async function init() {
 			{ id: "new-text", label: "\uFF0B Text file" },
 			{ id: "new-sticky", label: "\uFF0B Sticky note" },
 			{ id: "new-browser", label: "\uFF0B Browser" },
+			{ id: "new-calendar", label: "\uFF0B Calendar" },
 			{ separator: true },
 			{ id: "new-shape-rect", label: "▭ Rectangle" },
 			{ id: "new-shape-circle", label: "○ Circle" },
@@ -2230,6 +2287,8 @@ async function init() {
 			const tile = createCanvasTile("browser", cx, cy);
 			spawnBrowserWebview(tile, true);
 			saveCanvasImmediate();
+		} else if (selected === "new-calendar") {
+			createCalendarTile(cx, cy);
 		} else if (selected && selected.startsWith("new-shape-")) {
 			const SHAPE_MAP = { "new-shape-rect": "rect", "new-shape-circle": "circle", "new-shape-diamond": "diamond", "new-shape-triangle": "triangle", "new-shape-arrow": "arrow-right", "new-shape-line": "line" };
 			createShapeTile(cx, cy, SHAPE_MAP[selected] || "rect");
@@ -2402,6 +2461,44 @@ async function init() {
 	singletonWebviews.settings.webview.addEventListener("focus", () => {
 		noteSurfaceFocus("settings");
 	});
+
+	// -- Sidebar calendar --
+	const navCalendarContainer = document.getElementById("nav-calendar");
+	if (navCalendarContainer && configs.calendarTile) {
+		const calWv = document.createElement("webview");
+		calWv.setAttribute("src", configs.calendarTile.src);
+		calWv.setAttribute("preload", configs.calendarTile.preload);
+		calWv.setAttribute("webpreferences", "contextIsolation=yes, sandbox=yes");
+		calWv.style.width = "100%";
+		calWv.style.height = "100%";
+		calWv.style.border = "none";
+		navCalendarContainer.appendChild(calWv);
+
+		let savedNavWidth = null;
+		let savedNavMaxWidth = null;
+		calWv.addEventListener("ipc-message", (event) => {
+			if (event.channel === "calendar-tile:request-expand") {
+				const requested = event.args[0];
+				const target = typeof requested === "number" && requested > 0
+					? requested
+					: Math.floor(window.innerWidth / 2);
+				if (savedNavWidth == null) {
+					savedNavWidth = panelNav.getBoundingClientRect().width;
+					savedNavMaxWidth = panelNav.style.maxWidth || "";
+				}
+				panelNav.style.maxWidth = `${target}px`;
+				panelNav.style.flex = `0 0 ${target}px`;
+			} else if (event.channel === "calendar-tile:request-restore") {
+				if (savedNavWidth != null) {
+					panelNav.style.flex = `0 0 ${savedNavWidth}px`;
+					panelNav.style.maxWidth = savedNavMaxWidth ?? "";
+					savedNavWidth = null;
+					savedNavMaxWidth = null;
+				}
+			}
+		});
+	}
+
 	window.addEventListener("focus", () => {
 		noteSurfaceFocus("shell");
 	});
@@ -2438,7 +2535,7 @@ async function init() {
 		const navContainer = document.createElement("div");
 		navContainer.className = "nav-container";
 		navContainer.style.display = "none";
-		panelNav.appendChild(navContainer);
+		fileBrowserBody.appendChild(navContainer);
 
 		const navHandle = createWebview(
 			"nav", configs.nav, navContainer, handleDndMessage,
@@ -2544,7 +2641,7 @@ async function init() {
 			panelNav.style.display = "";
 			navResizeHandle.style.display = "";
 			const stored = loadPanelPref("panel-width-nav");
-			const px = stored != null && stored > 1 ? stored : 280;
+			const px = stored != null && stored > 1 ? stored : 340;
 			panelNav.style.flex = `0 0 ${px}px`;
 			panelViewer.style.flex = "1 1 0";
 		} else {
@@ -2605,6 +2702,17 @@ async function init() {
 				},
 				);
 				spawnGraphWebview(tile);
+			} else if (savedTile.type === "calendar") {
+				const tile = createCanvasTile(
+					"calendar", savedTile.x, savedTile.y, {
+					id: savedTile.id,
+					width: savedTile.width,
+					height: savedTile.height,
+					zIndex: savedTile.zIndex,
+				},
+				);
+				tile._origWidth = tile.width;
+				spawnCalendarWebview(tile);
 			} else if (savedTile.type === "browser") {
 				const tile = createCanvasTile(
 					"browser", savedTile.x, savedTile.y, {
@@ -2666,6 +2774,16 @@ async function init() {
 			restoreKanbanState(savedState.kanban);
 		}
 
+		// Restore custom zones (before deleted, so deletion can apply to custom zones too)
+		if (savedState.customZones?.length) {
+			loadCustomZones(savedState.customZones);
+		}
+
+		// Restore deleted zones (before labels/positions to avoid orphan data)
+		if (savedState.deletedZones?.length) {
+			loadDeletedZones(savedState.deletedZones);
+		}
+
 		// Restore zone labels
 		if (savedState.zoneLabels) {
 			loadZoneLabels(savedState.zoneLabels);
@@ -2682,6 +2800,18 @@ async function init() {
 	} else {
 		// No saved state (fresh start) — enable saving
 		canvasRestoreComplete = true;
+	}
+
+	// 現在実行中の Claude Code セッションで tile.claudeActive を初期化
+	if (window.shellApi.agentGetActiveSessions) {
+		window.shellApi.agentGetActiveSessions().then(({ sessions }) => {
+			for (const s of sessions) {
+				if (!s.ptySessionId) continue;
+				const t = tiles.find(t => t.ptySessionId === s.ptySessionId);
+				if (t) { t.claudeActive = true; t.claudeLastActive = Date.now(); }
+			}
+			if (sessions.length > 0) buildTileList();
+		}).catch(() => {});
 	}
 
 	// -- Initialize workspaces --
@@ -2881,6 +3011,21 @@ async function init() {
 				if (channel !== "workspace-changed") {
 					singletonViewer.send(channel, ...args);
 				}
+				// Track Claude Code active terminals via agent session events
+				if (channel === "agent:session-started") {
+					const { ptySessionId } = args[0] || {};
+					if (ptySessionId) {
+						const t = tiles.find(t => t.ptySessionId === ptySessionId);
+						if (t) { t.claudeActive = true; t.claudeLastActive = Date.now(); buildTileList(); }
+					}
+				} else if (channel === "agent:session-ended") {
+					const { ptySessionId } = args[0] || {};
+					if (ptySessionId) {
+						const t = tiles.find(t => t.ptySessionId === ptySessionId);
+						if (t) { t.claudeActive = false; t.claudeLastActive = Date.now(); buildTileList(); }
+					}
+				}
+
 				// Broadcast events to canvas tile webviews
 				if (
 					channel === "fs-changed" ||
@@ -4231,6 +4376,26 @@ async function init() {
 		else openScratchpad();
 	}
 
+	// -- File browser overlay --
+	function openFileBrowser() {
+		if (fileBrowserOverlay) fileBrowserOverlay.classList.remove("hidden");
+		if (toolFilesBtn) toolFilesBtn.classList.add("pen-dock-active");
+	}
+	function closeFileBrowser() {
+		if (fileBrowserOverlay) fileBrowserOverlay.classList.add("hidden");
+		if (toolFilesBtn) toolFilesBtn.classList.remove("pen-dock-active");
+	}
+	function toggleFileBrowser() {
+		if (fileBrowserOverlay && !fileBrowserOverlay.classList.contains("hidden")) closeFileBrowser();
+		else openFileBrowser();
+	}
+	if (fileBrowserClose) fileBrowserClose.addEventListener("click", closeFileBrowser);
+	if (fileBrowserBackdrop) fileBrowserBackdrop.addEventListener("click", closeFileBrowser);
+	if (toolFilesBtn) {
+		toolFilesBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+		toolFilesBtn.addEventListener("click", toggleFileBrowser);
+	}
+
 	if (scratchpadCloseBtn) scratchpadCloseBtn.addEventListener("click", closeScratchpad);
 	if (scratchpadBackdrop) scratchpadBackdrop.addEventListener("click", closeScratchpad);
 	if (scratchpadDockBtn) {
@@ -4372,32 +4537,19 @@ async function init() {
 				}
 				const savedArchived = Array.isArray(saved.archived) ? saved.archived.map(normalizeCard) : [];
 
-				// Restore zone columns — migrate cards if zone IDs were renamed
+				// Restore zone columns — reconcile with current zones
 				let zoneColumns = null;
 				if (saved.zoneColumns && Array.isArray(saved.zoneColumns)) {
-					const currentZoneIds = new Set(ZONE_COLUMNS.map((z) => z.id));
 					const restoredCols = saved.zoneColumns.map((zc) => ({
 						id: zc.id,
 						title: zc.title || "Untitled",
 						cards: Array.isArray(zc.cards) ? zc.cards.map(normalizeCard) : [],
 					}));
-
-					// Check if saved IDs match current zone definitions
-					const savedIds = new Set(restoredCols.map((c) => c.id));
-					const allMatch = ZONE_COLUMNS.every((z) => savedIds.has(z.id));
-
-					if (allMatch) {
-						zoneColumns = restoredCols;
-					} else {
-						// Zone IDs changed — create fresh columns and migrate cards by position
-						zoneColumns = createDefaultZoneColumns();
-						const orphanCards = restoredCols.flatMap((c) => c.cards);
-						if (orphanCards.length > 0) {
-							// Put orphaned cards in the first zone column
-							zoneColumns[0].cards.push(...orphanCards);
-							console.log(`[kanban] Migrated ${orphanCards.length} cards from renamed zone columns`);
-						}
-					}
+					const savedColMap = new Map(restoredCols.map(c => [c.id, c]));
+					// 現在のゾーン定義に合わせて列を整合（存在しない列は追加、削除済みゾーンの列は除外）
+					zoneColumns = getZoneColumns().map(z => (
+						savedColMap.get(z.id) || { id: z.id, title: z.title, cards: [] }
+					));
 				}
 
 				kanbanState = {
@@ -5174,7 +5326,7 @@ async function init() {
 	}
 
 	function createDefaultZoneColumns() {
-		return ZONE_COLUMNS.map((z) => ({ id: z.id, title: z.title, cards: [] }));
+		return getZoneColumns().map((z) => ({ id: z.id, title: z.title, cards: [] }));
 	}
 
 	function switchKanbanMode(newMode) {
@@ -5254,7 +5406,7 @@ async function init() {
 			colEl.dataset.colId = col.id;
 
 			// Zone mode: apply zone accent color
-			const zoneDef = ZONE_COLUMNS.find((z) => z.id === col.id);
+			const zoneDef = getZoneColumns().find((z) => z.id === col.id);
 			if (mode === "zone" && zoneDef) {
 				colEl.style.borderTopColor = zoneDef.color;
 				colEl.classList.add("kanban-column-zone");
@@ -5577,6 +5729,84 @@ async function init() {
 				refreshCards();
 			});
 			floatBody.appendChild(resetBtn);
+
+			// ゾーン追加フォーム
+			const addZoneWrap = document.createElement("div");
+			addZoneWrap.className = "zone-layout-add-wrap";
+			addZoneWrap.style.display = "none";
+
+			const addZoneInput = document.createElement("input");
+			addZoneInput.className = "zone-layout-add-input";
+			addZoneInput.placeholder = "Zone name...";
+			addZoneInput.maxLength = 32;
+
+			const addZoneConfirm = document.createElement("button");
+			addZoneConfirm.type = "button";
+			addZoneConfirm.className = "zone-layout-add-confirm";
+			addZoneConfirm.textContent = "Add";
+
+			const addZoneCancel = document.createElement("button");
+			addZoneCancel.type = "button";
+			addZoneCancel.className = "zone-layout-add-cancel";
+			addZoneCancel.textContent = "✕";
+
+			addZoneWrap.appendChild(addZoneInput);
+			addZoneWrap.appendChild(addZoneConfirm);
+			addZoneWrap.appendChild(addZoneCancel);
+
+			function commitAddZone() {
+				const name = addZoneInput.value.trim();
+				if (!name) return;
+				const zones = getZones();
+				const palette = ZONE_COLOR_PALETTE[zones.length % ZONE_COLOR_PALETTE.length];
+				const lastZone = zones[zones.length - 1];
+				const x = lastZone ? lastZone.x + lastZone.width + ZONE_GAP : 40;
+				const y = lastZone ? lastZone.y : 40;
+				const newZone = addZone({
+					id: `zone-custom-${Date.now()}`,
+					label: name.toUpperCase(),
+					color: palette.color,
+					borderColor: palette.borderColor,
+					x, y,
+					width: ZONE_W,
+					height: ZONE_TOTAL_H,
+				});
+				repositionZones(canvasX, canvasY, canvasScale);
+				if (!kanbanState.zoneColumns) kanbanState.zoneColumns = createDefaultZoneColumns();
+				kanbanState.zoneColumns.push({ id: newZone.id, title: newZone.label, cards: [] });
+				renderKanban();
+				buildCards();
+				_buildTileListNow();
+				saveCanvasDebounced();
+				addZoneInput.value = "";
+				addZoneWrap.style.display = "none";
+				addZoneBtn.style.display = "";
+			}
+
+			addZoneConfirm.addEventListener("click", commitAddZone);
+			addZoneCancel.addEventListener("click", () => {
+				addZoneInput.value = "";
+				addZoneWrap.style.display = "none";
+				addZoneBtn.style.display = "";
+			});
+			addZoneInput.addEventListener("keydown", (e) => {
+				if (e.key === "Enter") { e.preventDefault(); commitAddZone(); }
+				if (e.key === "Escape") { addZoneCancel.click(); }
+				e.stopPropagation();
+			});
+
+			const addZoneBtn = document.createElement("button");
+			addZoneBtn.type = "button";
+			addZoneBtn.className = "zone-layout-reset-btn zone-layout-add-btn";
+			addZoneBtn.textContent = "+ Add Zone";
+			addZoneBtn.addEventListener("click", () => {
+				addZoneBtn.style.display = "none";
+				addZoneWrap.style.display = "flex";
+				addZoneInput.focus();
+			});
+
+			floatBody.appendChild(addZoneBtn);
+			floatBody.appendChild(addZoneWrap);
 		}
 
 		function buildCards() {
@@ -5623,6 +5853,10 @@ async function init() {
 					if (val) setZoneLabel(zone.id, val);
 					input.replaceWith(nameEl);
 					nameEl.textContent = getZoneLabel(zone.id);
+					// カンバン同期のため zone-label-change を発火
+					document.getElementById("zone-layer")?.dispatchEvent(
+						new CustomEvent("zone-label-change", { bubbles: true })
+					);
 				};
 				input.addEventListener("blur", commit);
 				input.addEventListener("keydown", (ev) => {
@@ -5750,6 +5984,27 @@ async function init() {
 				);
 			});
 
+			// 削除ボタン
+			const delBtn = document.createElement("div");
+			delBtn.className = "zone-layout-card-del-btn";
+			delBtn.textContent = "×";
+			delBtn.title = "ゾーンを削除";
+			delBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+			delBtn.addEventListener("click", (e) => {
+				e.stopPropagation();
+				if (!confirm(`「${getZoneLabel(zone.id)}」を削除しますか？`)) return;
+				removeZone(zone.id);
+				// カンバン列も削除
+				if (kanbanState.zoneColumns) {
+					kanbanState.zoneColumns = kanbanState.zoneColumns.filter(c => c.id !== zone.id);
+					renderKanban();
+				}
+				buildCards();
+				_buildTileListNow();
+				saveCanvasDebounced();
+			});
+			card.appendChild(delBtn);
+
 			return card;
 		}
 
@@ -5852,11 +6107,22 @@ async function init() {
 		code: "<>",
 		image: "⬜",
 		graph: "⬡",
+		calendar: "📅",
 	};
 
 	let buildTileListTimer = null;
 	// ゾーンセクションの折りたたみ状態を永続管理（再描画後も維持）
 	const collapsedZones = new Set();
+
+	// 検索ボックスのセットアップ
+	const tileSearchInput = document.getElementById("tile-list-search");
+	if (tileSearchInput) {
+		tileSearchInput.addEventListener("input", () => buildTileList());
+		tileSearchInput.addEventListener("keydown", (e) => {
+			if (e.key === "Escape") { tileSearchInput.value = ""; buildTileList(); }
+			e.stopPropagation();
+		});
+	}
 
 	function buildTileList() {
 		clearTimeout(buildTileListTimer);
@@ -5867,10 +6133,69 @@ async function init() {
 		const body = document.getElementById("tile-list-body");
 		if (!body) return;
 		body.innerHTML = "";
-		if (tiles.length === 0) {
+
+		const query = (document.getElementById("tile-list-search")?.value ?? "").trim().toLowerCase();
+
+		// 検索クエリでタイルをフィルタ（ラベル・タイプ・cwd・urlを対象）
+		const filteredTiles = query
+			? tiles.filter(t => {
+				const label = getTileLabel(t).toLowerCase();
+				const type  = (t.type ?? "").toLowerCase();
+				const extra = (t.cwd ?? t.url ?? t.filePath ?? "").toLowerCase();
+				return label.includes(query) || type.includes(query) || extra.includes(query);
+			})
+			: tiles;
+
+		// Claude Code が実行中（claudeActive=true）または30分以内に完了したターミナル
+		const THIRTY_MIN = 30 * 60 * 1000;
+		const now = Date.now();
+		const activeTerms = tiles.filter(t =>
+			t.type === "term" && (
+				t.claudeActive === true ||
+				(t.claudeLastActive && (now - t.claudeLastActive) < THIRTY_MIN)
+			)
+		);
+		if (activeTerms.length > 0) {
+			const activeSection = document.createElement("div");
+			activeSection.className = "tile-list-active-section";
+
+			const activeHeader = document.createElement("div");
+			activeHeader.className = "tile-list-active-header";
+			const runningCount = activeTerms.filter(t => t.claudeActive).length;
+			activeHeader.textContent = runningCount > 0
+				? `▶ CLAUDE CODE (${runningCount} running)`
+				: `✓ CLAUDE CODE (recently done)`;
+			activeSection.appendChild(activeHeader);
+
+			for (const t of activeTerms) {
+				const label = getTileLabel(t);
+				const btn = document.createElement("button");
+				btn.className = "tile-list-item tile-list-active-item";
+				btn.title = label.name;
+
+				const icon = document.createElement("span");
+				icon.className = "tile-list-type";
+				icon.textContent = t.claudeActive ? "▶" : "✓";
+
+				const name = document.createElement("span");
+				name.className = "tile-list-name";
+				name.textContent = label.name;
+
+				btn.appendChild(icon);
+				btn.appendChild(name);
+				btn.addEventListener("click", () => {
+					executeCanvasRpc("jumpToTile", { tileId: t.id });
+				});
+				activeSection.appendChild(btn);
+			}
+
+			body.appendChild(activeSection);
+		}
+
+		if (filteredTiles.length === 0) {
 			const empty = document.createElement("div");
 			empty.style.cssText = "padding:8px 12px;font-size:11px;color:var(--muted);";
-			empty.textContent = "No tiles yet";
+			empty.textContent = query ? "No results" : "No tiles yet";
 			body.appendChild(empty);
 			return;
 		}
@@ -5884,10 +6209,11 @@ async function init() {
 			hasParent.add(conn.toTileId);
 		}
 
-		// ゾーン別にタイルIDを分類
+		// ゾーン別にタイルIDを分類（filteredTilesを対象）
+		const filteredTileIds = new Set(filteredTiles.map(t => t.id));
 		const zoneTileIdSets = new Map();
 		for (const zone of ZONES) {
-			const ids = new Set(getTilesInZone(zone.id, tiles));
+			const ids = new Set(getTilesInZone(zone.id, tiles).filter(id => filteredTileIds.has(id)));
 			zoneTileIdSets.set(zone.id, ids);
 		}
 
@@ -6029,7 +6355,7 @@ async function init() {
 		}
 
 		// 未配置セクション（どのゾーンにも属さないタイル）
-		const unassignedTiles = tiles.filter(t => !assignedTileIds.has(t.id));
+		const unassignedTiles = filteredTiles.filter(t => !assignedTileIds.has(t.id));
 		renderZoneSection("unassigned", "未配置", "rgba(128,128,128,0.6)", unassignedTiles);
 	}
 
