@@ -3469,12 +3469,7 @@ async function init() {
 				removeWorkspace(activeIndex);
 			}
 		} else if (action === "focus-search") {
-			if (activeIndex >= 0 && workspaces[activeIndex]) {
-				if (fileBrowserOverlay && fileBrowserOverlay.classList.contains("hidden")) {
-					openFileBrowser();
-				}
-				focusActiveNavSearch();
-			}
+			if (window.__openTileSearch) window.__openTileSearch();
 		} else if (action === "add-workspace") {
 			wsAddOption.click();
 		} else if (action.startsWith("switch-tab-")) {
