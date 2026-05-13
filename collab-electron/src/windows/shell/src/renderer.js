@@ -3470,10 +3470,8 @@ async function init() {
 			}
 		} else if (action === "focus-search") {
 			if (activeIndex >= 0 && workspaces[activeIndex]) {
-				if (!navVisible) {
-					navVisible = true;
-					savePanelVisible("nav", navVisible);
-					applyNavVisibility();
+				if (fileBrowserOverlay && fileBrowserOverlay.classList.contains("hidden")) {
+					openFileBrowser();
 				}
 				focusActiveNavSearch();
 			}
