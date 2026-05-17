@@ -496,6 +496,8 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.invoke("memos:load"),
   memosSave: (data: unknown): Promise<void> =>
     ipcRenderer.invoke("memos:save", data),
+  canvasReadClipboardImage: (): Promise<{ data: ArrayBuffer; format: string } | null> =>
+    ipcRenderer.invoke("canvas:read-clipboard-image"),
   calendarRequestExpand: (widthPx?: number) =>
     ipcRenderer.sendToHost("calendar-tile:request-expand", widthPx),
   calendarRequestRestore: () =>

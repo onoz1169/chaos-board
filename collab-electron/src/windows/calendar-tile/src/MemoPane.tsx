@@ -137,6 +137,42 @@ export default function MemoPane() {
     scheduleSave(updated);
   }, [data, activeMemo, nameValue, scheduleSave]);
 
+  const insertImageAtCursor = useCallback((dataUrl: string) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.focus();
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    const img = document.createElement("img");
+    img.src = dataUrl;
+    img.style.maxWidth = "100%";
+    img.style.display = "block";
+    img.style.margin = "4px 0";
+    range.insertNode(img);
+    range.setStartAfter(img);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    handleInput();
+  }, [handleInput]);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLDivElement>) => {
+    const items = Array.from(e.clipboardData.items);
+    const imageItem = items.find((item) => item.type.startsWith("image/"));
+    if (!imageItem) return;
+    e.preventDefault();
+    const file = imageItem.getAsFile();
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      if (dataUrl) insertImageAtCursor(dataUrl);
+    };
+    reader.readAsDataURL(file);
+  }, [insertImageAtCursor]);
+
   const copyContent = useCallback(() => {
     const text = editorRef.current?.innerText ?? "";
     navigator.clipboard.writeText(text).catch(() => {});
@@ -225,6 +261,7 @@ export default function MemoPane() {
         contentEditable
         suppressContentEditableWarning
         onInput={handleInput}
+        onPaste={handlePaste}
         data-placeholder="メモを入力..."
       />
     </div>

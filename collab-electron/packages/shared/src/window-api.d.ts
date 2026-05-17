@@ -174,6 +174,7 @@ export interface CollabApi {
     buffer: ArrayBuffer,
   ) => Promise<string>;
   openImageDialog: () => Promise<string | null>;
+  canvasReadClipboardImage: () => Promise<{ data: ArrayBuffer; format: string } | null>;
 
   readTree: (params: {
     root: string;

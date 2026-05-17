@@ -61,6 +61,8 @@ const MAJOR = 80;
 
 let canvasX = 0;
 let canvasY = 0;
+let lastCanvasMouseX = 0;
+let lastCanvasMouseY = 0;
 let zoomSnapTimer = null;
 let zoomSnapRaf = null;
 let lastZoomFocalX = 0;
@@ -493,6 +495,44 @@ function setupResize(
 	});
 }
 
+// -- Image paste helpers --
+
+/**
+ * Insert a data-URL image at the current cursor position inside a contentEditable element.
+ * @param {string} dataUrl
+ * @param {string} className
+ */
+function insertImageAtCursor(dataUrl, className) {
+	const sel = window.getSelection();
+	if (!sel || sel.rangeCount === 0) return;
+	const range = sel.getRangeAt(0);
+	range.deleteContents();
+	const img = document.createElement("img");
+	img.src = dataUrl;
+	if (className) img.className = className;
+	range.insertNode(img);
+	range.setStartAfter(img);
+	range.collapse(true);
+	sel.removeAllRanges();
+	sel.addRange(range);
+}
+
+/**
+ * Read an image from a paste event's clipboardData and call onImage(file) if found.
+ * Returns true if an image was found.
+ * @param {ClipboardEvent} e
+ * @param {(file: File) => void} onImage
+ */
+function readPasteImage(e, onImage) {
+	const items = e.clipboardData ? Array.from(e.clipboardData.items) : [];
+	const item = items.find((i) => i.type.startsWith("image/"));
+	if (!item) return false;
+	e.preventDefault();
+	const file = item.getAsFile();
+	if (file) onImage(file);
+	return true;
+}
+
 // -- Init --
 
 async function init() {
@@ -693,6 +733,9 @@ async function init() {
 		}, true);  // capture phase to fire before tile handlers
 
 		canvasEl.addEventListener("mousemove", (e) => {
+			const rect = canvasEl.getBoundingClientRect();
+			lastCanvasMouseX = (e.clientX - rect.left - canvasX) / canvasScale;
+			lastCanvasMouseY = (e.clientY - rect.top - canvasY) / canvasScale;
 			if (!pressTimer) return;
 			const dist = Math.hypot(e.clientX - pressStartX, e.clientY - pressStartY);
 			if (dist > 5) {
@@ -1501,11 +1544,29 @@ async function init() {
 		const textEl = dom.contentArea.querySelector(".sticky-text");
 		const STICKY_FONT_SIZES = [10, 12, 14, 16, 20, 24, 32, 48];
 		if (textEl) {
-			textEl.textContent = content;
+			// HTML content (contains pasted images) vs legacy plain text
+			if (content && /<img[\s>]/i.test(content)) {
+				textEl.innerHTML = content;
+			} else {
+				textEl.textContent = content || "";
+			}
 			textEl.style.fontSize = fontSize + "px";
 			textEl.addEventListener("input", () => {
-				tile.content = textEl.textContent;
+				tile.content = textEl.innerHTML;
 				saveCanvasDebounced();
+			});
+			textEl.addEventListener("paste", (e) => {
+				readPasteImage(e, (file) => {
+					const reader = new FileReader();
+					reader.onload = (ev) => {
+						const dataUrl = ev.target?.result;
+						if (!dataUrl) return;
+						insertImageAtCursor(dataUrl, "sticky-pasted-img");
+						tile.content = textEl.innerHTML;
+						saveCanvasDebounced();
+					};
+					reader.readAsDataURL(file);
+				});
 			});
 			// Ctrl+Scroll to resize font
 			textEl.addEventListener("wheel", (e) => {
@@ -1707,6 +1768,7 @@ async function init() {
 		}
 
 		saveCanvasImmediate();
+		return tile;
 	}
 
 	// -- Edge indicators --
@@ -3205,6 +3267,23 @@ async function init() {
 
 	// -- Copy / Paste (Cmd+C / Cmd+V) --
 
+	async function pasteImageTile() {
+		try {
+			const clipImg = await window.shellApi.readClipboardImage();
+			if (!clipImg) return;
+			const fileName = `pasted-${Date.now()}.png`;
+			const savedPath = await window.shellApi.saveClipboardImage(fileName, clipImg.data);
+			const tile = createFileTile("image", lastCanvasMouseX, lastCanvasMouseY, savedPath);
+			if (tile) {
+				clearSelection();
+				selectTile(tile.id);
+				syncSelectionVisuals();
+			}
+		} catch (err) {
+			console.error("[paste] clipboard image error:", err);
+		}
+	}
+
 	let clipboardTiles = [];
 	let pasteOffset = 0;
 
@@ -3237,42 +3316,48 @@ async function init() {
 
 		if (
 			e.key === "v" &&
-			clipboardTiles.length > 0 &&
 			(activeSurface === "canvas" || activeSurface === "canvas-tile")
 		) {
-			e.preventDefault();
-			pasteOffset += 40;
-			clearSelection();
-			for (const src of clipboardTiles) {
-				const newX = src.x + pasteOffset;
-				const newY = src.y + pasteOffset;
-				const extra = { width: src.width, height: src.height };
-				if (src.filePath !== undefined) extra.filePath = src.filePath;
-				if (src.folderPath !== undefined) extra.folderPath = src.folderPath;
-				if (src.workspacePath !== undefined) extra.workspacePath = src.workspacePath;
-				if (src.url !== undefined) extra.url = src.url;
-				if (src.label !== undefined) extra.label = src.label;
-				if (src.content !== undefined) extra.content = src.content;
-				if (src.noteColor !== undefined) extra.noteColor = src.noteColor;
-				if (src.fontSize !== undefined) extra.fontSize = src.fontSize;
-				if (src.cwd !== undefined) extra.cwd = src.cwd;
-				if (src.shapeType !== undefined) extra.shapeType = src.shapeType;
-				if (src.shapeColor !== undefined) extra.shapeColor = src.shapeColor;
-				if (src.shapeBorder !== undefined) extra.shapeBorder = src.shapeBorder;
-				let newTile;
-				if (src.type === "shape") {
-					newTile = createShapeTile(newX, newY, src.shapeType, src.shapeColor, src.shapeBorder, extra);
-				} else {
-					newTile = createCanvasTile(src.type, newX, newY, extra);
+			// Canvas tile paste takes priority
+			if (clipboardTiles.length > 0) {
+				e.preventDefault();
+				pasteOffset += 40;
+				clearSelection();
+				for (const src of clipboardTiles) {
+					const newX = src.x + pasteOffset;
+					const newY = src.y + pasteOffset;
+					const extra = { width: src.width, height: src.height };
+					if (src.filePath !== undefined) extra.filePath = src.filePath;
+					if (src.folderPath !== undefined) extra.folderPath = src.folderPath;
+					if (src.workspacePath !== undefined) extra.workspacePath = src.workspacePath;
+					if (src.url !== undefined) extra.url = src.url;
+					if (src.label !== undefined) extra.label = src.label;
+					if (src.content !== undefined) extra.content = src.content;
+					if (src.noteColor !== undefined) extra.noteColor = src.noteColor;
+					if (src.fontSize !== undefined) extra.fontSize = src.fontSize;
+					if (src.cwd !== undefined) extra.cwd = src.cwd;
+					if (src.shapeType !== undefined) extra.shapeType = src.shapeType;
+					if (src.shapeColor !== undefined) extra.shapeColor = src.shapeColor;
+					if (src.shapeBorder !== undefined) extra.shapeBorder = src.shapeBorder;
+					let newTile;
+					if (src.type === "shape") {
+						newTile = createShapeTile(newX, newY, src.shapeType, src.shapeColor, src.shapeBorder, extra);
+					} else {
+						newTile = createCanvasTile(src.type, newX, newY, extra);
+					}
+					if (src.type === "term") {
+						spawnTerminalWebview(newTile, false);
+					}
+					selectTile(newTile.id);
 				}
-				if (src.type === "term") {
-					spawnTerminalWebview(newTile, false);
-				}
-				selectTile(newTile.id);
+				repositionAllTiles();
+				syncSelectionVisuals();
+				saveCanvasDebounced();
+				return;
 			}
-			repositionAllTiles();
-			syncSelectionVisuals();
-			saveCanvasDebounced();
+
+			// No canvas tiles — check if OS clipboard has an image
+			await pasteImageTile();
 			return;
 		}
 	});

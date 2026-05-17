@@ -678,8 +678,9 @@ export function registerIpcHandlers(config: AppConfig): void {
     "canvas:save-clipboard-image",
     async (_event, fileName: string, buffer: ArrayBuffer) => {
       const ws = activeWorkspacePath();
-      if (!ws) throw new Error("No active workspace");
-      const dir = join(ws, ".canvas-images");
+      const dir = ws
+        ? join(ws, ".canvas-images")
+        : join(homedir(), ".chaos-board", "canvas-images");
       mkdirSync(dir, { recursive: true });
       const saved = await saveDroppedImage(
         dir,
