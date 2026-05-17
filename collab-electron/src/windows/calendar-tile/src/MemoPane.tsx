@@ -25,6 +25,8 @@ export default function MemoPane() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingDataRef = useRef<MemosData | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
+  // Track which memo id has been loaded into the editor to detect uninitialized state
+  const editorMemoIdRef = useRef<string | null>(null);
 
   const flushSave = useCallback(() => {
     if (saveTimerRef.current) {
@@ -42,10 +44,9 @@ export default function MemoPane() {
     window.api.memosLoad().then((raw) => {
       const d = raw as MemosData;
       setData(d);
-      const active = d.memos.find((m) => m.id === d.activeId);
-      if (active && editorRef.current) {
-        editorRef.current.innerHTML = active.content;
-      }
+      // editorRef.current is null here because data was null before this load,
+      // so the contentEditable div wasn't rendered yet.
+      // Content will be set in the useEffect below once the div mounts.
     }).catch(() => {});
   }, []);
 
@@ -77,7 +78,12 @@ export default function MemoPane() {
     if (!data) return;
     const target = data.memos.find((m) => m.id === id);
     if (!target) return;
-    const currentContent = editorRef.current?.innerHTML ?? "";
+    // Only trust the DOM if this memo was actually rendered into the editor.
+    // Otherwise use the stored content to avoid overwriting with empty string.
+    const currentContent = editorMemoIdRef.current === data.activeId
+      ? (editorRef.current?.innerHTML ?? "")
+      : (data.memos.find((m) => m.id === data.activeId)?.content ?? "");
+    editorMemoIdRef.current = id;
     const flushed: MemosData = {
       ...data,
       activeId: id,
@@ -100,6 +106,7 @@ export default function MemoPane() {
     };
     setData(updated);
     setDropdownOpen(false);
+    editorMemoIdRef.current = id;
     if (editorRef.current) editorRef.current.innerHTML = "";
     scheduleSave(updated);
   }, [data, scheduleSave]);
@@ -112,6 +119,7 @@ export default function MemoPane() {
     const updated: MemosData = { ...data, activeId: newActiveId, memos: remaining };
     setData(updated);
     if (data.activeId === id && editorRef.current) {
+      editorMemoIdRef.current = remaining[0].id;
       editorRef.current.innerHTML = remaining[0].content;
     }
     scheduleSave(updated);
@@ -177,6 +185,15 @@ export default function MemoPane() {
     const text = editorRef.current?.innerText ?? "";
     navigator.clipboard.writeText(text).catch(() => {});
   }, []);
+
+  // Initialize editor content once the contentEditable div mounts for the active memo.
+  // This runs after data loads (data was null → contentEditable wasn't rendered yet).
+  useEffect(() => {
+    if (!activeMemo || !editorRef.current) return;
+    if (editorMemoIdRef.current === activeMemo.id) return;
+    editorMemoIdRef.current = activeMemo.id;
+    editorRef.current.innerHTML = activeMemo.content;
+  }, [activeMemo]);
 
   useEffect(() => {
     const onHidden = () => { if (document.visibilityState === "hidden") flushSave(); };
